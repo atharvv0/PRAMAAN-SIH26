@@ -15,7 +15,7 @@ def authorize_workspace(
         return True
 
     # Same-team access
-    if user_team_id == workspace_team_id:
+    if can_access_workspace(role, user_team_id, workspace_team_id):
         return is_allowed(role, permission)
 
     # Cross-team access requires an approved grant
