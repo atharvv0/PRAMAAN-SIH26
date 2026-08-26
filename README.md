@@ -85,9 +85,26 @@ docs/      # Architecture, requirements mapping, demo script, roadmap
 ```bash
 cp .env.example .env
 docker compose up --build
+curl http://localhost:8000/api/v1/health
 ```
 
-_(Setup instructions will be filled in as `services/backend` and `infra/docker` come online.)_
+This boots `backend` (FastAPI), `frontend` (placeholder page), `postgres`, and
+`qdrant`. The first genuine agentic loop is already working — Planner → Executor →
+ToolRegistry, over demo-only tools — try it:
+
+```bash
+curl -X POST http://localhost:8000/api/v1/tasks \
+  -H "Content-Type: application/json" \
+  -d '{"intent": "summarize this file", "demo_file_path": "/app/data/samples/demo/sample_note.txt"}'
+# -> {"task_id": "task_..."}
+
+curl -X POST http://localhost:8000/api/v1/tasks/<task_id>/run
+# -> {"status": "completed", "final_output": {...}}
+```
+
+Full setup, per-module dev loops, and conventions: see
+[`docs/developer-setup.md`](docs/developer-setup.md). Each `services/<name>/README.md`
+has that module's own scope, contract, and Definition of Done — start there.
 
 ## License
 

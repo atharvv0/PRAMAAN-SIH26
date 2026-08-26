@@ -1,0 +1,4 @@
+# Owner: Role 5 (Multimodal/ML) — add exact pins as you validate pipelines.
+# Suggested starting point per the PRAMAAN dossier: qdrant-client, an OCR/layout
+# model client, a VLM client, pandas/openpyxl for the deterministic spreadsheet engine.
+pydantic==2.9.2
