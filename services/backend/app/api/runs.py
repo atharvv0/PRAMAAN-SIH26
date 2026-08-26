@@ -12,7 +12,6 @@ from fastapi import APIRouter, HTTPException
 
 from app.api.tasks import _TASKS
 from app.models.run import RunResult
-from services.orchestrator.errors import AgentLoopLimitError
 from services.orchestrator.planner.planner import create_plan
 from services.orchestrator.state_graph.agent_state import AgentState
 from services.orchestrator.state_graph.executor import run_plan
@@ -30,10 +29,12 @@ def run_task(task_id: str) -> RunResult:
     state = AgentState(task_id=task_id, user_id="demo-user", intent=record["intent"])
     state.plan = create_plan(task_id, record["intent"], file_path=record.get("demo_file_path"))
 
-    try:
-        state = run_plan(state, default_registry)
-    except AgentLoopLimitError as exc:
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    # Any PramaanError subclass (AgentLoopLimitError, ModelUnavailableError, ...)
+    # raised by run_plan is deliberately NOT caught here — it propagates to
+    # app.main's pramaan_error_handler, which maps it to the shared error shape
+    # (docs/api-contract.md "Error Shape") in one place instead of duplicating
+    # that mapping in every endpoint.
+    state = run_plan(state, default_registry)
 
     if state.approval_status == "pending":
         status = "awaiting_approval"

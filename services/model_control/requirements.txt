@@ -1,4 +1,7 @@
 # Owner: Role 2 (ML Systems/Runtime) — add exact pins as you benchmark real choices.
 # Suggested starting point per docs/architecture.md and the PRAMAAN dossier:
-# vllm, ollama (dev convenience), litellm (optional routing infra), pydantic
+# vllm (production runtime, not yet added — see adapters/ollama_adapter.py docstring),
+# litellm (optional routing infra, not yet needed), pydantic
 pydantic==2.9.2
+httpx==0.27.2
+pytest==8.3.3
