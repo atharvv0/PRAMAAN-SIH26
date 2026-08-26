@@ -8,6 +8,9 @@ def approve_request(request):
     if request not in access_requests:
         return "REQUEST NOT FOUND"
 
+    if request.status != "PENDING":
+        return "REQUEST ALREADY FINALIZED"
+
     request.status = "APPROVED"
 
     audit_events.append({
@@ -26,6 +29,9 @@ def approve_request(request):
 def deny_request(request):
     if request not in access_requests:
         return "REQUEST NOT FOUND"
+
+    if request.status != "PENDING":
+        return "REQUEST ALREADY FINALIZED"
 
     request.status = "DENIED"
 
