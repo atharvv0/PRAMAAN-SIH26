@@ -10,6 +10,16 @@ def grant_access(request):
     if request.status != "APPROVED":
         return "ACCESS NOT GRANTED"
 
+    for grant in access_grants:
+        if (
+            grant["requester_team"] == request.requester_team
+            and grant["target_team"] == request.target_team
+            and grant["resource"] == request.resource
+            and grant["permission"] == request.permission
+            and grant["status"] == "ACTIVE"
+        ):
+            return "ACCESS ALREADY GRANTED"
+
     grant = {
         "requester_team": request.requester_team,
         "target_team": request.target_team,
