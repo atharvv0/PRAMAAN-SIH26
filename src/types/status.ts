@@ -1,0 +1,13 @@
+export type StatusKind =
+  | 'queued'
+  | 'pending'
+  | 'running'
+  | 'success'
+  | 'completed'
+  | 'warning'
+  | 'failed'
+  | 'blocked'
+  | 'approval_required'
+  | 'offline'
+  | 'sovereign'
+  | 'external_blocked'
