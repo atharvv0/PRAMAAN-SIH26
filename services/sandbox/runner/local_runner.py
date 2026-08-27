@@ -1,0 +1,54 @@
+import subprocess
+import sys
+import time
+
+from contract import ExecutionRequest, ExecutionResult
+
+
+class LocalRunner:
+    def execute(self, request: ExecutionRequest) -> ExecutionResult:
+        start_time = time.perf_counter()
+
+        try:
+            process = subprocess.run(
+                [sys.executable, "-c", request.code],
+                input=request.stdin,
+                capture_output=True,
+                text=True,
+                timeout=request.policy.timeout_seconds,
+            )
+
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
+
+            status = "COMPLETED" if process.returncode == 0 else "FAILED"
+
+            return ExecutionResult(
+                request_id=request.request_id,
+                status=status,
+                stdout=process.stdout,
+                stderr=process.stderr,
+                exit_code=process.returncode,
+                duration_ms=duration_ms,
+            )
+
+        except subprocess.TimeoutExpired as error:
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
+
+            return ExecutionResult(
+                request_id=request.request_id,
+                status="TIMEOUT",
+                stdout=error.stdout or "",
+                stderr=error.stderr or "",
+                duration_ms=duration_ms,
+                error="execution timed out",
+            )
+
+        except Exception as error:
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
+
+            return ExecutionResult(
+                request_id=request.request_id,
+                status="ERROR",
+                duration_ms=duration_ms,
+                error=str(error),
+            )
