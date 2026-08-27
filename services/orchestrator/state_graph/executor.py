@@ -8,20 +8,39 @@ Safety rules enforced here (master prompt section 49 — never `while True: agen
   - a step with requires_approval=True is never auto-executed; execution pauses and
     approval_status is set to "pending" for the caller to surface as APPROVAL_REQUIRED
 
+Policy gate: every tool call goes through PolicyEngine.check() first
+(services/governance/policy_engine) — never Agent -> Tool directly, per
+docs/architecture.md "Core Principle". Every decision (allow AND deny) is recorded
+to the AuditLog (services/governance/audit). The default PolicyEngine denies any
+tool that declares_network_access — this is the live "outbound request blocked"
+sovereignty proof from the dossier, working today even before the team's real
+RBAC/permission logic replaces DefaultPolicyEngine.
+
+Event log: state.events records TASK_CREATED/PLAN_CREATED (once) then
+STEP_STARTED/TOOL_STARTED/TOOL_COMPLETED/EVIDENCE_ADDED/APPROVAL_REQUIRED/
+TASK_COMPLETED/TASK_FAILED per docs/agent-contract.md "Task Run Events" — exposed
+via GET /api/v1/tasks/{task_id}/events. This is a plain list, not true SSE
+streaming yet (TODO Phase 11) — good enough for the demo, trivial to upgrade.
+
 NOT done here yet (explicitly out of scope for this pass — do not silently add):
-  - Policy Engine gate before each tool call (services/governance/policy_engine
-    doesn't exist yet — TODO Phase 7). Once it does, the tool-call block below is
-    where `Agent -> Tool Request -> Policy Engine -> ALLOW/DENY -> Tool` gets wired in.
-  - Persistence of AgentState between calls (Phase 3, coordinate with the data owner).
-  - Model-backed re-planning on failure (Phase 5+).
+  - Real RBAC/per-document permissions (services/governance's real policy logic,
+    not this file's DefaultPolicyEngine placeholder)
+  - Persistence of AgentState across process restarts (Phase 3 continuation,
+    coordinate with the data owner — the backend API layer now keeps state
+    in-memory between calls so approval-resume works within a running process,
+    but it's still lost on restart)
+  - Model-backed re-planning on failure (Phase 5+)
 
 Evidence population: any tool result with an "evidence" list (shaped per
-docs/agent-contract.md "EvidenceRecord") is appended to state.evidence automatically —
-see the block below. Tools that don't produce evidence simply omit the key.
+docs/agent-contract.md "EvidenceRecord") is appended to state.evidence automatically.
 """
 from __future__ import annotations
 
-from services.orchestrator.errors import AgentLoopLimitError, ToolExecutionError
+from datetime import datetime, timezone
+
+from services.governance.audit.log import AuditLog, default_audit_log
+from services.governance.policy_engine.base import PolicyEngine, default_policy_engine
+from services.orchestrator.errors import AgentLoopLimitError, PermissionDeniedError, ToolExecutionError
 from services.orchestrator.planner.schemas import Plan, PlanStep, StepStatus
 from services.orchestrator.state_graph.agent_state import (
     AgentError as AgentErrorRecord,
@@ -43,14 +62,26 @@ def _ready_steps(plan: Plan, completed_ids: set[str]) -> list[PlanStep]:
     return ready
 
 
+def _emit(state: AgentState, event_type: str, **detail) -> None:
+    state.events.append(
+        {"type": event_type, "timestamp": datetime.now(timezone.utc).isoformat(), **detail}
+    )
+
+
 def run_plan(
     state: AgentState,
     registry: ToolRegistry,
     max_steps: int = DEFAULT_MAX_STEPS,
     max_retries_per_step: int = DEFAULT_MAX_RETRIES_PER_STEP,
+    policy_engine: PolicyEngine = default_policy_engine,
+    audit_log: AuditLog = default_audit_log,
 ) -> AgentState:
     if state.plan is None:
         raise ValueError("state.plan must be set before running the executor")
+
+    if not state.events:
+        _emit(state, "TASK_CREATED", task_id=state.task_id)
+        _emit(state, "PLAN_CREATED", step_count=len(state.plan.steps))
 
     steps_run = 0
     retries: dict[str, int] = {}
@@ -71,6 +102,7 @@ def run_plan(
         if step.requires_approval and state.approval_status != "approved":
             state.approval_status = "pending"
             state.current_step = step.id
+            _emit(state, "APPROVAL_REQUIRED", step_id=step.id)
             return state  # caller surfaces APPROVAL_REQUIRED; resume after approval
 
         if steps_run >= max_steps:
@@ -80,19 +112,41 @@ def run_plan(
             state.errors.append(
                 AgentErrorRecord(code=err.code, message=err.message, retryable=err.retryable)
             )
+            _emit(state, "TASK_FAILED", reason=err.code)
             raise err
 
         state.current_step = step.id
         step.status = StepStatus.RUNNING
+        _emit(state, "STEP_STARTED", step_id=step.id, capability=step.capability)
 
         try:
             result: dict = {}
             if step.tool:
                 tool = registry.get(step.tool)
+
+                decision = policy_engine.check(
+                    actor=state.user_id,
+                    action="tool.invoke",
+                    tool_id=step.tool,
+                    declares_network_access=tool.declares_network_access,
+                )
+                audit_log.record(
+                    actor=state.user_id,
+                    action="tool.invoke",
+                    target=step.tool,
+                    decision="allow" if decision.allow else "deny",
+                    policy_reason=decision.reason,
+                )
+                if not decision.allow:
+                    raise PermissionDeniedError(decision.reason)
+
+                _emit(state, "TOOL_STARTED", step_id=step.id, tool=step.tool)
                 result = tool.invoke(step.inputs)
                 state.tool_calls.append(
                     ToolCall(tool_id=step.tool, inputs=step.inputs, output=result)
                 )
+                _emit(state, "TOOL_COMPLETED", step_id=step.id, tool=step.tool)
+
             step.status = StepStatus.DONE
             state.completed_steps.append(step.id)
 
@@ -115,11 +169,20 @@ def run_plan(
                             validation_state=item.get("validation_state", "unverified"),
                         )
                     )
+                    _emit(state, "EVIDENCE_ADDED", step_id=step.id)
 
             # Simple data-flow: hand this step's output to any step that depends on it.
             for other in state.plan.steps:
                 if step.id in other.depends_on:
                     other.inputs = {**other.inputs, f"upstream_{step.id}": result}
+
+        except PermissionDeniedError as exc:
+            step.status = StepStatus.FAILED
+            state.errors.append(
+                AgentErrorRecord(code=exc.code, message=exc.message, retryable=exc.retryable)
+            )
+            _emit(state, "TASK_FAILED", step_id=step.id, reason=exc.code)
+            break  # a denied tool call is never retried
 
         except Exception as exc:  # noqa: BLE001 — deliberately broad: wrap into a typed error
             attempt = retries.get(step.id, 0)
@@ -132,6 +195,7 @@ def run_plan(
             state.errors.append(
                 AgentErrorRecord(code=wrapped.code, message=wrapped.message, retryable=wrapped.retryable)
             )
+            _emit(state, "TASK_FAILED", step_id=step.id, reason=wrapped.code)
             break  # MVP behaviour: stop on first un-retryable failure, don't cascade
 
         steps_run += 1
@@ -142,5 +206,6 @@ def run_plan(
             "completed_steps": state.completed_steps,
             "tool_outputs": [tc.output for tc in state.tool_calls],
         }
+        _emit(state, "TASK_COMPLETED", task_id=state.task_id)
 
     return state

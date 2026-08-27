@@ -16,10 +16,11 @@ the Phase 1–2 skeleton.
 | GET | `/api/v1/health` | Liveness check | **implemented** (`services/backend`) |
 | POST | `/api/v1/tasks` | Create a task from a user instruction | **implemented** — in-memory store only, no persistence yet |
 | GET | `/api/v1/tasks/{task_id}` | Get task status | **implemented** — in-memory store only |
-| POST | `/api/v1/tasks/{task_id}/run` | Run the agent loop for a task, synchronously | **implemented** — see below; no persistence, no async/event streaming yet |
-| GET | `/api/v1/runs/{run_id}` | Get run status by run_id | TODO — current `/run` response is the terminal result; no separate lookup-by-run_id yet |
-| GET | `/api/v1/runs/{run_id}/events` | Stream execution trace (SSE) | TODO Phase 11 |
-| POST | `/api/v1/runs/{run_id}/approve` | Approve/reject a pending step | TODO Phase 13 — executor already pauses and sets `approval_status: pending`, but there's no endpoint yet to resume it |
+| POST | `/api/v1/tasks/{task_id}/run` | Run the agent loop for a task | **implemented** — reuses stored AgentState across calls; no cross-restart persistence yet |
+| POST | `/api/v1/tasks/{task_id}/approve` | Resume a task paused on `awaiting_approval` | **implemented** |
+| GET | `/api/v1/tasks/{task_id}/events` | Full event-log list for a task | **implemented** — plain JSON list, not SSE streaming yet (TODO Phase 11) |
+| GET | `/api/v1/runs/{run_id}` | Get run status by run_id | not implemented — `run_id` is currently just a label in each `/run` response, not independently queryable; task_id is the real lookup key |
+| GET | `/api/v1/runs/{run_id}/events` | Stream execution trace (SSE) | superseded for now by `GET /tasks/{task_id}/events` above — real SSE is TODO Phase 11 |
 | GET | `/api/v1/deliverables/{id}` | Fetch a generated deliverable | TODO Phase 14 |
 
 Full endpoint groups planned (do not implement ahead of the roadmap phase — see
@@ -56,6 +57,56 @@ Response `201`:
   "created_at": "2026-08-25T10:00:00Z"
 }
 ```
+
+## Example: `POST /api/v1/tasks/{task_id}/approve` (implemented)
+
+Only valid when the task's stored state has `approval_status: "pending"` (set by a
+previous `/run` call on a plan step with `requires_approval: true` — the demo
+planner branch triggers this for any intent containing "approval"/"approve").
+Response `200` shape is identical to `/run`'s `RunResult`, with `status` now
+`"completed"` (or `"failed"`) instead of `"awaiting_approval"`. Calling this when
+nothing is pending returns `409`.
+
+## Example: `GET /api/v1/tasks/{task_id}/events` (implemented)
+
+Response `200`:
+```json
+[
+  { "type": "TASK_CREATED", "timestamp": "...", "task_id": "..." },
+  { "type": "PLAN_CREATED", "timestamp": "...", "step_count": 1 },
+  { "type": "STEP_STARTED", "timestamp": "...", "step_id": "...", "capability": "..." },
+  { "type": "TASK_FAILED", "timestamp": "...", "step_id": "...", "reason": "PERMISSION_DENIED" }
+]
+```
+Event types match `docs/agent-contract.md` "Task Run Events". The sequence above is
+a real captured trace from the sovereignty-proof demo: intent `"test network
+access"` routes to a tool that declares network access, gets denied by the Policy
+Engine before it ever runs, and the denial + reason are both in this log and in
+the `AuditLog` (`services/governance/audit`).
+
+## Example: `POST /api/v1/tasks/{task_id}/run` with a knowledge-search intent (implemented — real RAG, not a demo tool)
+
+Intent containing "sop"/"search the knowledge"/"look up" routes to the real
+`knowledge.search` tool (`services/knowledge/rag/`) — genuine offline similarity
+search, not a placeholder. Real captured response:
+```json
+{
+  "status": "completed",
+  "evidence": [
+    {
+      "claim": "The inspection was completed on schedule. ... follow-up inspection is recommended within 90 days.",
+      "source": "data/samples/demo/sample_note.txt",
+      "page_or_region": "chunk_0",
+      "tool": "knowledge.search",
+      "confidence": 0.4415578896653721,
+      "validation_state": "unverified"
+    }
+  ]
+}
+```
+`confidence` here is a real cosine similarity score, not a fixed placeholder
+number. Ingest more documents via `Retriever.ingest_file()` — currently only one
+demo sample is pre-seeded (`services/orchestrator/tools/registry_instance.py`).
 
 ## Example: `POST /api/v1/tasks/{task_id}/run` (implemented — demo tools only)
 

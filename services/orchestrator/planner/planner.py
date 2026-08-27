@@ -17,6 +17,28 @@ from services.orchestrator.planner.schemas import Plan, PlanStep
 def create_plan(task_id: str, intent: str, file_path: str | None = None) -> Plan:
     intent_lower = intent.lower()
 
+    network_keywords = ("network", "outbound", "external call", "sovereignty proof", "sovereign proof")
+    if any(k in intent_lower for k in network_keywords):
+        # Demo-only branch: proves the live "outbound request blocked" sovereignty
+        # story (docs/architecture.md). This tool is denied by the PolicyEngine
+        # before it ever runs — see services/orchestrator/tools/examples.py.
+        return Plan(
+            task_id=task_id,
+            goal=intent,
+            steps=[PlanStep(capability="network_egress_test", tool="network.fetch_demo", inputs={})],
+        )
+
+    knowledge_keywords = ("sop", "search the knowledge", "what does the sop", "search sop", "look up")
+    if any(k in intent_lower for k in knowledge_keywords):
+        # Real capability, not a demo placeholder: services/knowledge's RAG tool
+        # (HashingVectorizer + Qdrant), pre-seeded with a demo sample document —
+        # see services/orchestrator/tools/registry_instance.py.
+        return Plan(
+            task_id=task_id,
+            goal=intent,
+            steps=[PlanStep(capability="knowledge_search", tool="knowledge.search", inputs={"query": intent})],
+        )
+
     multimodal_keywords = (
         "scan", "scanned", "p&id", "pid drawing", "drawing", "ocr",
         "vision", "image", "photo", "handwrit", "inspection package",
@@ -51,4 +73,9 @@ def create_plan(task_id: str, intent: str, file_path: str | None = None) -> Plan
         PlanStep(capability="respond", depends_on=[], inputs={}),
     ]
     steps[1].depends_on = [steps[0].id]
+    # Demo-only: an "approval"-flavoured intent marks the final step as requiring
+    # human approval, so the pause/resume flow (executor + /tasks/{id}/approve) is
+    # provable end-to-end — matches the dossier's flagship "approval note" step.
+    if "approval" in intent_lower or "approve" in intent_lower:
+        steps[1].requires_approval = True
     return Plan(task_id=task_id, goal=intent, steps=steps)

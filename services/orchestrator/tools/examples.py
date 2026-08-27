@@ -92,3 +92,20 @@ class SummarizeTextTool(ToolAdapter):
         if summary and not summary.endswith("."):
             summary += "."
         return {"summary": summary, "sentence_count": len(sentences)}
+
+
+class NetworkFetchDemoTool(ToolAdapter):
+    """DEMO-ONLY tool that declares network access, used purely to prove the
+    sovereignty story live: the DefaultPolicyEngine (services/governance) denies
+    any tool with declares_network_access=True before it ever runs — this tool's
+    invoke() is intentionally never reached in a correctly-configured sovereign
+    deployment. id: network.fetch_demo."""
+
+    id = "network.fetch_demo"
+    required_permissions = ["network.egress"]
+    declares_network_access = True
+
+    def invoke(self, inputs: dict) -> dict:
+        # Never actually reached under DefaultPolicyEngine — if this line runs,
+        # the sovereignty boundary has a hole in it.
+        raise RuntimeError("network.fetch_demo should never execute in sovereign mode")

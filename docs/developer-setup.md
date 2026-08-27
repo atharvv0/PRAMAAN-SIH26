@@ -68,6 +68,25 @@ curl -X POST http://localhost:8000/api/v1/tasks/<task_id>/run
 # -> {"status": "completed", "final_output": {...}}
 ```
 
+**Note:** backend startup is noticeably slower now (~5-8s) because it imports
+`paddleocr`/`scikit-learn` at module load time via `services/knowledge`. This is
+expected, not a hang — give it a few seconds before your first request.
+
+## Verifying OCR/VLM on real hardware (not verifiable in every dev environment)
+
+`services/knowledge/ocr_vlm/paddle_adapter.py` (PaddleOCR) and
+`ollama_vlm_adapter.py` (Ollama vision models) both need things a sandboxed dev
+environment may not have — internet access to download PaddleOCR's model weights,
+and a running Ollama server with a vision model pulled, respectively. Verify both
+before relying on them for a demo:
+
+```bash
+# from repo root, with PYTHONPATH=.
+python -c "from services.knowledge.ocr_vlm.paddle_adapter import PaddleOcrAdapter; print('PaddleOCR ready:', PaddleOcrAdapter().health_check())"
+python -c "from services.knowledge.ocr_vlm.ollama_vlm_adapter import OllamaVlmAdapter; print('Ollama VLM ready:', OllamaVlmAdapter(model='llava').health_check())"
+```
+If either prints `False`, see that adapter's module docstring for what to check.
+
 ## Orchestrator (Role 1) — running its test suite
 
 ```bash
