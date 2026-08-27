@@ -1,0 +1,4 @@
+# Owner: Role 2 (ML Systems/Runtime) — add exact pins as you benchmark real choices.
+# Suggested starting point per docs/architecture.md and the PRAMAAN dossier:
+# vllm, ollama (dev convenience), litellm (optional routing infra), pydantic
+pydantic==2.9.2

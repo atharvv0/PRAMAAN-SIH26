@@ -1,0 +1,4 @@
+# Owner: Role 4 (Security/Governance) — isolation target per the dossier is
+# Firecracker/Kata; use a lighter fallback (e.g. Docker-in-Docker with strict
+# resource/network limits) if hardware constrains during SIH.
+pydantic==2.9.2

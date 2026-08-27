@@ -1,0 +1,2 @@
+# Owner: Role 4 (Security/Governance) — add exact pins as you implement.
+pydantic==2.9.2

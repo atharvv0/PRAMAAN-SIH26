@@ -1,32 +1,40 @@
-# React + TypeScript + Vite
+# PRAMAAN
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+**Sovereign On-Premise Agentic AI Workbench**
 
-Currently, two official plugins are available:
+SIH 2026 | Problem Statement **SIH26117** | PS Given by **Mangalore Refinery and Petrochemicals Limited (MRPL)** | Category: Software / Smart Automation
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+> Confidential industrial work should be delegable to AI without surrendering control of the data — with every model, tool, source and network boundary observable and auditable.
 
-## React Compiler
+## What is PRAMAAN?
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+PRAMAAN is a **self-hosted, air-gapped, multi-model agentic workbench** that lets confidential industrial organisations delegate multimodal, multi-step knowledge work to open-weight AI — with provable sovereignty and evidence-linked deliverables.
 
-## Expanding the Oxlint configuration
+It is not a chatbot, not a basic RAG app, and not a cloud AI wrapper.
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+## Core Capabilities
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
-```
+| Pillar | What it does |
+|---|---|
+| Model Intelligence | Tasks auto-routed to different open-weight models by capability |
+| Agentic Execution | One instruction → visible plan → tools → iteration → validation → result |
+| Multimodal Intelligence | Scanned PDF / image / P&ID → structured, verifiable output |
+| Coding + Verification | Generated code runs in a sandbox and is tested |
+| Sovereignty Proof | Outbound network requests visibly blocked and logged |
+| Real Deliverable | Actual `.docx` / `.pptx` / `.xlsx` / code artifact is produced |
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Architecture
+
+```text
+User / UI → Orchestration (Planner/Executor) → Model Control (Registry/Router) → Sovereignty (Network policy/Audit)
+                ↓                    ↓                    ↓                         ↓
+
+           Multimodal           Knowledge             Tools                    Trust
+         (OCR/VLM, P&ID)      (RAG over SOPs)     (Files, Sandbox)       (Evidence, Provenance)
+
+                └────────────────────┴────────────────────┴──────────────────────────┘
+                                             ↓
+
+                                  Deliverables (Word/PPT/Excel/Code)
+
+                         Everything stays inside the controlled deployment boundary
