@@ -3,10 +3,11 @@ import sys
 import time
 
 from services.sandbox.runner.contract import ExecutionRequest, ExecutionResult
+from services.sandbox.runner.runtime import ExecutionRuntime
 from services.sandbox.policies.execution_policy import ExecutionPolicyValidator
 
 
-class LocalRunner:
+class LocalRunner(ExecutionRuntime):
     def __init__(self):
         self.policy_validator = ExecutionPolicyValidator()
 
@@ -41,6 +42,16 @@ class LocalRunner:
                 duration_ms=duration_ms,
             )
 
+        except ValueError as error:
+            duration_ms = int((time.perf_counter() - start_time) * 1000)
+
+            return ExecutionResult(
+                request_id=request.request_id,
+                status="REJECTED",
+                duration_ms=duration_ms,
+                error=str(error),
+            )
+
         except subprocess.TimeoutExpired as error:
             duration_ms = int((time.perf_counter() - start_time) * 1000)
 
@@ -51,16 +62,6 @@ class LocalRunner:
                 stderr=error.stderr or "",
                 duration_ms=duration_ms,
                 error="execution timed out",
-            )
-
-        except ValueError as error:
-            duration_ms = int((time.perf_counter() - start_time) * 1000)
-
-            return ExecutionResult(
-                request_id=request.request_id,
-                status="REJECTED",
-                duration_ms=duration_ms,
-                error=str(error),
             )
 
         except Exception as error:
