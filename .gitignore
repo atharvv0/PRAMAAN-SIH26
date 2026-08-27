@@ -1,35 +1,74 @@
-<<<<<<< HEAD
-# Environment variables
+# ---- Environment / secrets ----
 .env
 .env.*
 !.env.example
+*.env.local
+*.pem
+*.key
 
-# Python virtual environments
-venv/
-.venv/
-env/
-
-# Python cache
+# ---- Python ----
 __pycache__/
 *.py[cod]
 *.pyo
+*.egg-info/
+.venv/
+venv/
+env/
+.mypy_cache/
 
-# Pytest
+# ---- Pytest / Coverage ----
 .pytest_cache/
 .coverage
 htmlcov/
+coverage.xml
 
-# IDE
+# ---- IDE / Editor ----
 .vscode/
+!.vscode/extensions.json
 .idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
 
-# Logs
+# ---- Node / Frontend ----
+node_modules/
+dist/
+dist-ssr/
+build/
+.next/
+.parcel-cache/
+*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ---- Docker ----
+*.pid
+
+# ---- Models / vector data / large artifacts ----
+*.gguf
+*.safetensors
+*.bin
+data/vectorstore/*
+!data/vectorstore/.gitkeep
+services/model_control/registry/weights/
+models/
+
+# ---- Sample data too large to track directly ----
+data/samples/**/*.pdf
+data/samples/**/*.png
+data/samples/**/*.jpg
+!data/samples/**/.gitkeep
+
+# ---- Logs / audit trails ----
 *.log
+logs/
+audit/*.jsonl
 
-# OS
+# ---- OS ----
 .DS_Store
 Thumbs.db
-=======
-__pycache__/ 
-*.pyc 
->>>>>>> origin/database

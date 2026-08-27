@@ -1,12 +1,17 @@
 version: "3.9"
 
 # PRAMAAN — Level 1 (SIH MVP) infra
-# One workstation / server target. Services get real Dockerfiles as each
-# module comes online — this is the scaffold contract, not yet runnable.
+# One workstation / server target.
+# backend + frontend boot today (see services/backend, services/frontend).
+# model-control/knowledge/governance/sandbox are in-process Python packages
+# imported by backend for the MVP (see docs/architecture.md "Deployment Topology")
+# and get their own containers post-SIH if warranted.
 
 services:
   backend:
-    build: ./services/backend
+    build:
+      context: .
+      dockerfile: services/backend/Dockerfile
     env_file: .env
     ports:
       - "${APP_PORT:-8000}:8000"
@@ -20,7 +25,7 @@ services:
     build: ./services/frontend
     env_file: .env
     ports:
-      - "${FRONTEND_PORT:-3000}:3000"
+      - "${FRONTEND_PORT:-3000}:80"
     depends_on:
       - backend
     networks:

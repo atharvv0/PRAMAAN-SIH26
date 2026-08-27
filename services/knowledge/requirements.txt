@@ -1,0 +1,12 @@
+# Real, working, fully-offline RAG stack (see rag/README section in this file's
+# module docstrings for why): scikit-learn HashingVectorizer for embeddings
+# (no model download needed) + qdrant-client for vector storage/retrieval.
+# PaddleOCR is real too but needs internet access to download model weights —
+# see ocr_vlm/paddle_adapter.py for exact status and how to verify it.
+qdrant-client==1.19.0
+scikit-learn==1.5.2
+paddleocr==3.2.0
+paddlepaddle==3.0.0
+httpx==0.27.2
+pydantic==2.9.2
+pytest==8.3.3
