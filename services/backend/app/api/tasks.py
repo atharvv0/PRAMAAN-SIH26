@@ -8,6 +8,7 @@ from here — go through a repository interface, per the master prompt's "Databa
 Integration" rule.
 """
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import JSONResponse
 
 from app.models.task import TaskCreateRequest, TaskResponse
 

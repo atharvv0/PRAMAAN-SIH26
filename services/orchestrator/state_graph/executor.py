@@ -40,7 +40,7 @@ from datetime import datetime, timezone
 
 from services.governance.audit.log import AuditLog, default_audit_log
 from services.governance.policy_engine.base import PolicyEngine, default_policy_engine
-from services.orchestrator.errors import AgentLoopLimitError, PermissionDeniedError, ToolExecutionError
+from services.orchestrator.errors import AgentLoopLimitError, PramaanError, PermissionDeniedError, ToolExecutionError
 from services.orchestrator.planner.schemas import Plan, PlanStep, StepStatus
 from services.orchestrator.state_graph.agent_state import (
     AgentError as AgentErrorRecord,

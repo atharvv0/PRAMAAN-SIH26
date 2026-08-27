@@ -12,7 +12,7 @@ from fastapi import APIRouter, HTTPException
 
 from app.api.tasks import _TASKS
 from app.models.run import RunResult
-from services.orchestrator.errors import AgentLoopLimitError
+from services.orchestrator.errors import PramaanError
 from services.orchestrator.planner.planner import create_plan
 from services.orchestrator.state_graph.agent_state import AgentState
 from services.orchestrator.state_graph.executor import run_plan
@@ -48,15 +48,24 @@ def run_task(task_id: str) -> RunResult:
         raise HTTPException(status_code=404, detail="task not found")
 
     state: AgentState | None = record.get("state")
+
     if state is None:
-        state = AgentState(task_id=task_id, user_id="demo-user", intent=record["intent"])
-        state.plan = create_plan(task_id, record["intent"], file_path=record.get("demo_file_path"))
+        state = AgentState(
+            task_id=task_id,
+            user_id="demo-user",
+            intent=record["intent"],
+        )
+        state.plan = create_plan(
+            task_id,
+            record["intent"],
+            file_path=record.get("demo_file_path"),
+        )
 
     try:
         state = run_plan(state, default_registry)
-    except AgentLoopLimitError as exc:
+    except PramaanError:
         record["state"] = state
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise
 
     record["state"] = state
     return _to_run_result(task_id, state)
@@ -69,17 +78,20 @@ def approve_task(task_id: str) -> RunResult:
         raise HTTPException(status_code=404, detail="task not found")
 
     state: AgentState | None = record.get("state")
+
     if state is None or state.approval_status != "pending":
         raise HTTPException(
-            status_code=409, detail="task has no step currently awaiting approval"
+            status_code=409,
+            detail="task has no step currently awaiting approval",
         )
 
     state.approval_status = "approved"
+
     try:
         state = run_plan(state, default_registry)
-    except AgentLoopLimitError as exc:
+    except PramaanError:
         record["state"] = state
-        raise HTTPException(status_code=500, detail=str(exc)) from exc
+        raise
 
     record["state"] = state
     return _to_run_result(task_id, state)
@@ -89,12 +101,16 @@ def approve_task(task_id: str) -> RunResult:
 def get_task_events(task_id: str) -> list[dict]:
     """Plain JSON list of the event log — see docs/api-contract.md. Not true SSE
     streaming yet (TODO Phase 11); this is the full log to date, polled or fetched
-    once the run reaches a terminal/paused state."""
+    once the run reaches a terminal/paused state.
+    """
     record = _TASKS.get(task_id)
+
     if record is None:
         raise HTTPException(status_code=404, detail="task not found")
 
     state: AgentState | None = record.get("state")
+
     if state is None:
         return []
+
     return state.events
