@@ -65,3 +65,4 @@ class AgentState(BaseModel):
     errors: list[AgentError] = Field(default_factory=list)
     approval_status: str = "not_required"
     final_output: dict | None = None
+    events: list[dict] = Field(default_factory=list)

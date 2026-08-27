@@ -100,6 +100,78 @@ def test_multimodal_loop_populates_evidence():
     assert ev.validation_state == "unverified"
 
 
+def test_network_tool_denied_by_default_policy_engine():
+    from services.orchestrator.tools.examples import NetworkFetchDemoTool
+
+    plan = create_plan(task_id="task_8", intent="test network access", file_path=None)
+    assert plan.steps[0].tool == "network.fetch_demo"
+
+    registry = ToolRegistry()
+    registry.register(NetworkFetchDemoTool())
+    state = AgentState(task_id="task_8", user_id="user_1", intent="test network access")
+    state.plan = plan
+
+    result_state = run_plan(state, registry)
+
+    assert result_state.final_output is None
+    assert len(result_state.errors) == 1
+    assert result_state.errors[0].code == "PERMISSION_DENIED"
+    # the tool's invoke() must never have actually run
+    assert result_state.tool_calls == []
+
+
+def test_network_denial_is_recorded_in_audit_log():
+    from services.governance.audit.log import AuditLog
+    from services.orchestrator.tools.examples import NetworkFetchDemoTool
+
+    audit_log = AuditLog()
+    registry = ToolRegistry()
+    registry.register(NetworkFetchDemoTool())
+
+    plan = create_plan(task_id="task_9", intent="test network access")
+    state = AgentState(task_id="task_9", user_id="user_1", intent="test network access")
+    state.plan = plan
+
+    run_plan(state, registry, audit_log=audit_log)
+
+    events = audit_log.all()
+    assert len(events) == 1
+    assert events[0].decision == "deny"
+    assert events[0].target == "network.fetch_demo"
+
+
+def test_approval_demo_plan_pauses_and_resumes_via_approval_status():
+    plan = create_plan(task_id="task_10", intent="prepare an approval note")
+    assert plan.steps[1].requires_approval is True
+
+    state = AgentState(task_id="task_10", user_id="user_1", intent="prepare an approval note")
+    state.plan = plan
+
+    paused = run_plan(state, ToolRegistry())
+    assert paused.approval_status == "pending"
+    assert len(paused.completed_steps) == 1  # first step ran, second is gated
+
+    paused.approval_status = "approved"
+    resumed = run_plan(paused, ToolRegistry())
+    assert resumed.approval_status == "approved"
+    assert len(resumed.completed_steps) == 2
+    assert resumed.final_output is not None
+
+
+def test_event_log_records_expected_lifecycle_events():
+    plan = create_plan(task_id="task_11", intent="do something vague")
+    state = AgentState(task_id="task_11", user_id="user_1", intent="do something vague")
+    state.plan = plan
+
+    result_state = run_plan(state, ToolRegistry())
+
+    event_types = [e["type"] for e in result_state.events]
+    assert event_types[0] == "TASK_CREATED"
+    assert event_types[1] == "PLAN_CREATED"
+    assert "STEP_STARTED" in event_types
+    assert event_types[-1] == "TASK_COMPLETED"
+
+
 def test_max_steps_ceiling_raises_agent_loop_limit_error():
     class _NoopTool(ToolAdapter):
         id = "noop"

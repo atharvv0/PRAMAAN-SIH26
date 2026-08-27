@@ -62,26 +62,51 @@ this is what backs the "click a claim -> exact source region" differentiator in
 `docs/architecture.md`, and it's surfaced all the way through the API response
 (`docs/api-contract.md`).
 
-**Verified live, not just unit-tested:** creating a task via the backend API with
-either a summarize intent or a "scanned ... drawing" intent, then calling `/run`,
-produces a real multi-step result — including populated evidence for the
-multimodal path — through the full API → Executor → ToolRegistry → demo tools path.
+Every tool call now goes through a real Policy Engine gate
+(`services/governance/policy_engine`) before it runs, and every decision (allow AND
+deny) is written to a real Audit Log (`services/governance/audit`) — the default
+policy denies any tool that declares network access, which is the "outbound request
+blocked, live" sovereignty proof from the dossier, working today. A demo-only tool
+(`network.fetch_demo`) exists purely to trigger this path — its `invoke()` should
+never actually run in a correctly-configured system, and a test asserts exactly
+that. The team's real RBAC/permission logic replaces `DefaultPolicyEngine` behind
+the same `PolicyEngine.check()` interface, no executor changes needed.
+
+`AgentState.events` now records the full lifecycle
+(`TASK_CREATED`/`PLAN_CREATED`/`STEP_STARTED`/`TOOL_STARTED`/`TOOL_COMPLETED`/
+`EVIDENCE_ADDED`/`APPROVAL_REQUIRED`/`TASK_COMPLETED`/`TASK_FAILED`) per
+`docs/agent-contract.md` "Task Run Events", exposed via `GET
+/api/v1/tasks/{task_id}/events`. The approval pause point is no longer a dead end —
+`services/backend` now keeps `AgentState` alive between calls, so `POST
+/api/v1/tasks/{task_id}/approve` genuinely resumes a paused run and finishes it.
+
+**Verified live, not just unit-tested:** all three of — read+summarize,
+scanned-doc+evidence, approval pause/resume, and network-access denial — were run
+against a real running server over HTTP, not just pytest. A fourth real (not
+demo) capability is now also live: `knowledge.search` (`services/knowledge/rag/`)
+does genuine offline similarity search against a pre-seeded document and returns
+real relevance scores — see `docs/api-contract.md` for a captured example.
 
 ## Definition of Done (this phase — Phase 3, see docs/roadmap.md)
 
 - [x] `Plan`/`PlanStep`/`AgentState` match `docs/agent-contract.md`
 - [x] `ToolRegistry` register/get round-trip tested
 - [x] Executor: plan -> execute step -> next step, with dependency ordering
-- [x] Human-approval pause point implemented (executor stops, sets `approval_status`)
+- [x] Human-approval pause point implemented AND resumable via a real API endpoint
 - [x] Hard step-count ceiling (`AgentLoopLimitError`) implemented and tested
 - [x] One instruction -> multi-step plan -> tool use -> completed result, proven live
       via the backend API (master prompt section 29's "first genuine agentic loop")
 - [x] Multimodal-shaped plan branch (OCR-then-summarize) + evidence population,
       proven live end-to-end with a demo OCR placeholder tool
+- [x] Every tool call gated through a real Policy Engine + Audit Log (default
+      implementation — deny-by-default network egress); swap for the team's real
+      RBAC logic behind the same interface
+- [x] Event log implemented and exposed via the API (not SSE-streamed yet)
 - [ ] `create_plan()` backed by a real model call via `services/model_control`
 - [ ] Real OCR/VLM/RAG pipeline replacing `ocr.process_naive` (services/knowledge —
       now also this project owner's responsibility)
-- [ ] Executor calls tools only through Policy Engine (`services/governance`) —
-      not wired yet, that module doesn't exist
+- [ ] Real RBAC/per-document permission logic replacing `DefaultPolicyEngine`
+- [ ] AgentState persisted to Postgres, not just kept alive in backend's process
+      memory (currently survives across calls, not across a restart)
 - [ ] LangGraph itself (currently a hand-rolled loop, not yet using the LangGraph
       library — swap in once checkpointing/HITL primitives are actually needed)
