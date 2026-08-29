@@ -1,10 +1,27 @@
+from uuid import uuid4
+
 from app.db.session import SessionLocal
 
+from app.repositories.user_repository import create_user
+
+from app.services.workspace_service import (
+    create_workspace_service,
+)
+
+from app.services.project_service import (
+    create_project_service,
+)
+
 from app.services.task_service import (
-    get_tasks_service,
+    create_task_service,
+)
+
+from app.services.model_service import (
+    create_model_service,
 )
 
 from app.services.model_version_service import (
+    create_model_version_service,
     get_model_versions_service,
 )
 
@@ -18,147 +35,177 @@ from app.services.model_call_service import (
 )
 
 
-db = SessionLocal()
+def test_model_call_service():
 
-try:
+    db = SessionLocal()
 
-    # --------------------------------------------------
-    # GET EXISTING TASK
-    # --------------------------------------------------
+    try:
 
-    tasks = get_tasks_service(
-        db,
-        limit=1,
-    )
+        # --------------------------------------------------
+        # CREATE USER
+        # --------------------------------------------------
 
-    if not tasks:
-        raise ValueError(
-            "No task found. Create a task first."
-        )
-
-    task = tasks[0]
-
-
-    # --------------------------------------------------
-    # GET EXISTING MODEL VERSION
-    # --------------------------------------------------
-
-    versions = get_model_versions_service(
-        db,
-        limit=1,
-    )
-
-    if not versions:
-        raise ValueError(
-            "No model version found. Create one first."
-        )
-
-    model_version = versions[0]
-
-
-    # --------------------------------------------------
-    # CREATE MODEL CALL
-    # --------------------------------------------------
-
-    model_call = create_model_call_service(
-        db=db,
-        task_id=task.task_id,
-        model_version_id=model_version.model_version_id,
-        purpose="PRAMAAN model call service test",
-        input_tokens=100,
-        output_tokens=50,
-        latency_ms=250,
-        status="pending",
-    )
-
-    print("Created Model Call:")
-    print("ID:", model_call.model_call_id)
-    print("Task ID:", model_call.task_id)
-    print("Model Version ID:", model_call.model_version_id)
-    print("Purpose:", model_call.purpose)
-    print("Input Tokens:", model_call.input_tokens)
-    print("Output Tokens:", model_call.output_tokens)
-    print("Latency:", model_call.latency_ms)
-    print("Status:", model_call.status)
-
-
-    # --------------------------------------------------
-    # GET BY ID
-    # --------------------------------------------------
-
-    found = get_model_call_service(
-        db,
-        model_call.model_call_id,
-    )
-
-    print("\nGet Model Call:")
-    print(found.model_call_id)
-
-
-    # --------------------------------------------------
-    # GET BY TASK
-    # --------------------------------------------------
-
-    task_calls = get_model_calls_by_task_service(
-        db,
-        task.task_id,
-    )
-
-    print(
-        "\nModel Calls By Task:",
-        len(task_calls),
-    )
-
-
-    # --------------------------------------------------
-    # GET BY MODEL VERSION
-    # --------------------------------------------------
-
-    version_calls = (
-        get_model_calls_by_model_version_service(
+        user = create_user(
             db,
-            model_version.model_version_id,
+            email=f"model-call-{uuid4().hex}@pramaan.local",
+            display_name="Model Call Test User",
         )
-    )
 
-    print(
-        "Model Calls By Model Version:",
-        len(version_calls),
-    )
+        # --------------------------------------------------
+        # CREATE WORKSPACE
+        # --------------------------------------------------
 
+        workspace = create_workspace_service(
+            db=db,
+            name=f"Model-Call-Workspace-{uuid4().hex[:8]}",
+            description="Model call service test workspace.",
+            sensitivity_class="confidential",
+        )
 
-    # --------------------------------------------------
-    # GET ALL
-    # --------------------------------------------------
+        # --------------------------------------------------
+        # CREATE PROJECT
+        # --------------------------------------------------
 
-    all_calls = get_model_calls_service(
-        db,
-        limit=100,
-    )
+        project = create_project_service(
+            db=db,
+            workspace_id=workspace.workspace_id,
+            name=f"Model-Call-Project-{uuid4().hex[:8]}",
+            description="Model call service test project.",
+        )
 
-    print(
-        "Total Model Calls:",
-        len(all_calls),
-    )
+        # --------------------------------------------------
+        # CREATE TASK
+        # --------------------------------------------------
 
+        task = create_task_service(
+            db=db,
+            project_id=project.project_id,
+            created_by=user.user_id,
+            title="Model Call Test Task",
+            intent="Test the model call service.",
+        )
 
-    # --------------------------------------------------
-    # UPDATE
-    # --------------------------------------------------
+        # --------------------------------------------------
+        # CREATE MODEL
+        # --------------------------------------------------
 
-    updated = update_model_call_service(
-        db=db,
-        model_call_id=model_call.model_call_id,
-        output_tokens=75,
-        latency_ms=300,
-        status="completed",
-    )
+        model = create_model_service(
+            db=db,
+            name=f"Test-Model-{uuid4().hex[:8]}",
+            runtime="test",
+        )
 
-    print("\nUpdated Model Call:")
-    print("Output Tokens:", updated.output_tokens)
-    print("Latency:", updated.latency_ms)
-    print("Status:", updated.status)
+        # --------------------------------------------------
+        # CREATE MODEL VERSION
+        # --------------------------------------------------
 
+        model_version = create_model_version_service(
+            db=db,
+            model_id=model.model_id,
+            version="1.0",
+            weights_path="test/model/weights",
+            license="MIT",
+            quantization="none",
+            vram_required_gb=4,
+            status="active",
+        )
 
-finally:
-    db.close()
+        # --------------------------------------------------
+        # VERIFY MODEL VERSION
+        # --------------------------------------------------
+
+        versions = get_model_versions_service(
+            db,
+            limit=100,
+        )
+
+        assert len(versions) >= 1
+
+        # --------------------------------------------------
+        # CREATE MODEL CALL
+        # --------------------------------------------------
+
+        model_call = create_model_call_service(
+            db=db,
+            task_id=task.task_id,
+            model_version_id=model_version.model_version_id,
+            purpose="PRAMAAN model call service test",
+            input_tokens=100,
+            output_tokens=50,
+            latency_ms=250,
+            status="pending",
+        )
+
+        assert model_call is not None
+        assert model_call.task_id == task.task_id
+        assert (
+            model_call.model_version_id
+            == model_version.model_version_id
+        )
+
+        # --------------------------------------------------
+        # GET BY ID
+        # --------------------------------------------------
+
+        found = get_model_call_service(
+            db,
+            model_call.model_call_id,
+        )
+
+        assert found is not None
+        assert found.model_call_id == model_call.model_call_id
+
+        # --------------------------------------------------
+        # GET BY TASK
+        # --------------------------------------------------
+
+        task_calls = get_model_calls_by_task_service(
+            db,
+            task.task_id,
+        )
+
+        assert len(task_calls) >= 1
+
+        # --------------------------------------------------
+        # GET BY MODEL VERSION
+        # --------------------------------------------------
+
+        version_calls = (
+            get_model_calls_by_model_version_service(
+                db,
+                model_version.model_version_id,
+            )
+        )
+
+        assert len(version_calls) >= 1
+
+        # --------------------------------------------------
+        # GET ALL
+        # --------------------------------------------------
+
+        all_calls = get_model_calls_service(
+            db,
+            limit=100,
+        )
+
+        assert len(all_calls) >= 1
+
+        # --------------------------------------------------
+        # UPDATE
+        # --------------------------------------------------
+
+        updated = update_model_call_service(
+            db=db,
+            model_call_id=model_call.model_call_id,
+            output_tokens=75,
+            latency_ms=300,
+            status="completed",
+        )
+
+        assert updated is not None
+        assert updated.output_tokens == 75
+        assert updated.latency_ms == 300
+        assert updated.status == "completed"
+
+    finally:
+        db.close()

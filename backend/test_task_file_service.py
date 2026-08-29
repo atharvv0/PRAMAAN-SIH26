@@ -1,4 +1,5 @@
-from app.db.session import SessionLocal
+import uuid
+import pytest
 
 from app.services.task_file_service import (
     attach_file_to_task_service,
@@ -9,76 +10,118 @@ from app.services.task_file_service import (
     detach_file_from_task_service,
 )
 
-from app.models.task import Task
-from app.models.file import File
+from app.services.workspace_service import (
+    create_workspace_service,
+)
+
+from app.services.project_service import (
+    create_project_service,
+)
+
+from app.services.task_service import (
+    create_task_service,
+)
+
+from app.services.file_service import (
+    create_file_service,
+)
+
+from app.repositories.user_repository import (
+    get_users,
+)
 
 
-db = SessionLocal()
-
-try:
-
-    task = db.query(Task).first()
-    file = db.query(File).first()
-
-    if task is None:
-        raise RuntimeError(
-            "No task found in database. Create a task first."
-        )
-
-    if file is None:
-        raise RuntimeError(
-            "No file found in database. Create a file first."
-        )
-
-    print("Using Task:")
-    print("Task ID:", task.task_id)
-
-    print("\nUsing File:")
-    print("File ID:", file.file_id)
+def test_task_file_service(db):
 
     # --------------------------------------------------
-    # CREATE / ATTACH
+    # GET EXISTING USER
     # --------------------------------------------------
 
-    existing = get_task_file_service(
+    users = get_users(
         db,
-        task.task_id,
-        file.file_id,
-    ) if db.query(
-        __import__(
-            "app.models.task_file",
-            fromlist=["TaskFile"]
-        ).TaskFile
-    ).filter(
-        __import__(
-            "app.models.task_file",
-            fromlist=["TaskFile"]
-        ).TaskFile.task_id == task.task_id,
-        __import__(
-            "app.models.task_file",
-            fromlist=["TaskFile"]
-        ).TaskFile.file_id == file.file_id,
-    ).first() else None
+        limit=1,
+    )
 
-    if existing is not None:
-        print("\nTask file already exists.")
-        print("Role:", existing.role)
-        task_file = existing
-    else:
-        task_file = attach_file_to_task_service(
-            db=db,
-            task_id=task.task_id,
-            file_id=file.file_id,
-            role="input",
+    if not users:
+        pytest.skip(
+            "No user found. Create a user first."
         )
 
-        print("\nAttached File To Task:")
-        print("Task ID:", task_file.task_id)
-        print("File ID:", task_file.file_id)
-        print("Role:", task_file.role)
+    user = users[0]
 
     # --------------------------------------------------
-    # GET
+    # UNIQUE TEST DATA
+    # --------------------------------------------------
+
+    test_id = uuid.uuid4().hex
+
+    # --------------------------------------------------
+    # CREATE WORKSPACE
+    # --------------------------------------------------
+
+    workspace = create_workspace_service(
+        db=db,
+        name=f"Task File Test Workspace {test_id}",
+        description="Workspace for task file service test.",
+        sensitivity_class="confidential",
+    )
+
+    # --------------------------------------------------
+    # CREATE PROJECT
+    # --------------------------------------------------
+
+    project = create_project_service(
+        db=db,
+        workspace_id=workspace.workspace_id,
+        name=f"Task File Test Project {test_id}",
+        description="Project for task file service test.",
+    )
+
+    # --------------------------------------------------
+    # CREATE TASK
+    # --------------------------------------------------
+
+    task = create_task_service(
+        db=db,
+        project_id=project.project_id,
+        created_by=user.user_id,
+        title=f"Task File Test Task {test_id}",
+        intent="Test task file relationship service.",
+    )
+
+    # --------------------------------------------------
+    # CREATE FILE
+    # --------------------------------------------------
+
+    file = create_file_service(
+        db=db,
+        project_id=project.project_id,
+        uploaded_by=user.user_id,
+        filename=f"task-file-test-{test_id}.pdf",
+        mime_type="application/pdf",
+        size_bytes=1024,
+        storage_path=f"test/task-file-test-{test_id}.pdf",
+        sha256=f"task-file-test-sha256-{test_id}",
+        sensitivity_class="confidential",
+    )
+
+    # --------------------------------------------------
+    # ATTACH FILE TO TASK
+    # --------------------------------------------------
+
+    task_file = attach_file_to_task_service(
+        db=db,
+        task_id=task.task_id,
+        file_id=file.file_id,
+        role="input",
+    )
+
+    assert task_file.task_id == task.task_id
+    assert task_file.file_id == file.file_id
+    assert task_file.role == "input"
+
+    # --------------------------------------------------
+    # GET TASK FILE
     # --------------------------------------------------
 
     found = get_task_file_service(
@@ -87,8 +130,9 @@ try:
         file.file_id,
     )
 
-    print("\nGet Task File:")
-    print("Role:", found.role)
+    assert found.task_id == task.task_id
+    assert found.file_id == file.file_id
+    assert found.role == "input"
 
     # --------------------------------------------------
     # GET FILES FOR TASK
@@ -99,8 +143,10 @@ try:
         task.task_id,
     )
 
-    print("\nFiles For Task:")
-    print("Total:", len(files))
+    assert any(
+        item.file_id == file.file_id
+        for item in files
+    )
 
     # --------------------------------------------------
     # GET TASKS FOR FILE
@@ -111,8 +157,10 @@ try:
         file.file_id,
     )
 
-    print("\nTasks For File:")
-    print("Total:", len(tasks))
+    assert any(
+        item.task_id == task.task_id
+        for item in tasks
+    )
 
     # --------------------------------------------------
     # UPDATE ROLE
@@ -125,8 +173,7 @@ try:
         role="reference",
     )
 
-    print("\nUpdated Task File:")
-    print("Role:", updated.role)
+    assert updated.role == "reference"
 
     # --------------------------------------------------
     # RESTORE ROLE
@@ -139,11 +186,10 @@ try:
         role="input",
     )
 
-    print("\nRestored Role:")
-    print("Role:", updated.role)
+    assert updated.role == "input"
 
     # --------------------------------------------------
-    # DELETE / DETACH
+    # DETACH FILE
     # --------------------------------------------------
 
     deleted = detach_file_from_task_service(
@@ -152,8 +198,15 @@ try:
         file.file_id,
     )
 
-    print("\nDetached File From Task:")
-    print(deleted)
+    assert deleted is True
 
-finally:
-    db.close()
+    # --------------------------------------------------
+    # VERIFY DETACHED
+    # --------------------------------------------------
+
+    with pytest.raises(ValueError):
+        get_task_file_service(
+            db,
+            task.task_id,
+            file.file_id,
+        )

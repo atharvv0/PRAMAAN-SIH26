@@ -1,4 +1,14 @@
+from uuid import uuid4
+
 from app.db.session import SessionLocal
+
+from app.services.workspace_service import (
+    create_workspace_service,
+)
+
+from app.services.project_service import (
+    create_project_service,
+)
 
 from app.services.file_service import (
     create_file_service,
@@ -11,120 +21,154 @@ from app.services.file_service import (
     delete_file_service,
 )
 
-from app.repositories.project_repository import get_projects
-from app.repositories.user_repository import get_users
+from app.repositories.user_repository import (
+    create_user,
+)
 
 
-db = SessionLocal()
+def test_file_service():
 
-try:
-    # Get existing project
-    projects = get_projects(db, limit=1)
+    db = SessionLocal()
 
-    if not projects:
-        raise ValueError(
-            "No project found. Create a project first."
+    try:
+
+        # --------------------------------------------------
+        # CREATE USER
+        # --------------------------------------------------
+
+        user = create_user(
+            db,
+            email=f"file-test-{uuid4().hex}@pramaan.local",
+            display_name="File Test User",
         )
 
-    project = projects[0]
+        # --------------------------------------------------
+        # CREATE WORKSPACE
+        # --------------------------------------------------
 
-    # Get existing user
-    users = get_users(db, limit=1)
-
-    if not users:
-        raise ValueError(
-            "No user found. Create a user first."
+        workspace = create_workspace_service(
+            db=db,
+            name=f"File-Test-Workspace-{uuid4().hex[:8]}",
+            description="File service test workspace.",
+            sensitivity_class="confidential",
         )
 
-    user = users[0]
+        # --------------------------------------------------
+        # CREATE PROJECT
+        # --------------------------------------------------
 
-    # Create File
-    file = create_file_service(
-        db=db,
-        project_id=project.project_id,
-        uploaded_by=user.user_id,
-        filename="PRAMAAN-Test-File.pdf",
-        mime_type="application/pdf",
-        size_bytes=1024,
-        storage_path="test/pramaan-test-file.pdf",
-        sha256="pramaan-test-sha256-001",
-        sensitivity_class="confidential",
-    )
+        project = create_project_service(
+            db=db,
+            workspace_id=workspace.workspace_id,
+            name=f"File-Test-Project-{uuid4().hex[:8]}",
+            description="File service test project.",
+        )
 
-    print("Created File:")
-    print("ID:", file.file_id)
-    print("Filename:", file.filename)
-    print("MIME Type:", file.mime_type)
-    print("Size:", file.size_bytes)
-    print("Storage Path:", file.storage_path)
-    print("SHA256:", file.sha256)
-    print("Sensitivity:", file.sensitivity_class)
+        # --------------------------------------------------
+        # CREATE FILE
+        # --------------------------------------------------
 
-    # Get File
-    found = get_file_service(
-        db,
-        file.file_id,
-    )
+        sha256 = f"test-sha256-{uuid4().hex}"
 
-    print("\nGet File:")
-    print("Filename:", found.filename)
+        file = create_file_service(
+            db=db,
+            project_id=project.project_id,
+            uploaded_by=user.user_id,
+            filename="PRAMAAN-Test-File.pdf",
+            mime_type="application/pdf",
+            size_bytes=1024,
+            storage_path="test/pramaan-test-file.pdf",
+            sha256=sha256,
+            sensitivity_class="confidential",
+        )
 
-    # Get By SHA256
-    found_by_sha256 = get_file_by_sha256_service(
-        db,
-        "pramaan-test-sha256-001",
-    )
+        assert file is not None
+        assert file.filename == "PRAMAAN-Test-File.pdf"
+        assert file.project_id == project.project_id
+        assert file.uploaded_by == user.user_id
 
-    print("\nGet By SHA256:")
-    print("Filename:", found_by_sha256.filename)
+        # --------------------------------------------------
+        # GET FILE
+        # --------------------------------------------------
 
-    # Get Files By Project
-    project_files = get_files_by_project_service(
-        db,
-        project.project_id,
-    )
+        found = get_file_service(
+            db,
+            file.file_id,
+        )
 
-    print("\nFiles By Project:")
-    print(len(project_files))
+        assert found is not None
+        assert found.file_id == file.file_id
 
-    # Get Files By User
-    user_files = get_files_by_user_service(
-        db,
-        user.user_id,
-    )
+        # --------------------------------------------------
+        # GET BY SHA256
+        # --------------------------------------------------
 
-    print("\nFiles By User:")
-    print(len(user_files))
+        found_by_sha256 = get_file_by_sha256_service(
+            db,
+            sha256,
+        )
 
-    # Get All Files
-    files = get_files_service(
-        db,
-        limit=100,
-    )
+        assert found_by_sha256 is not None
+        assert found_by_sha256.file_id == file.file_id
 
-    print("\nTotal Files:")
-    print(len(files))
+        # --------------------------------------------------
+        # GET FILES BY PROJECT
+        # --------------------------------------------------
 
-    # Update File
-    updated = update_file_service(
-        db=db,
-        file_id=file.file_id,
-        filename="PRAMAAN-Test-File-Updated.pdf",
-        sensitivity_class="restricted",
-    )
+        project_files = get_files_by_project_service(
+            db,
+            project.project_id,
+        )
 
-    print("\nUpdated File:")
-    print("Filename:", updated.filename)
-    print("Sensitivity:", updated.sensitivity_class)
+        assert len(project_files) >= 1
 
-    # Delete File
-    deleted = delete_file_service(
-        db,
-        file.file_id,
-    )
+        # --------------------------------------------------
+        # GET FILES BY USER
+        # --------------------------------------------------
 
-    print("\nDeleted File:")
-    print(deleted)
+        user_files = get_files_by_user_service(
+            db,
+            user.user_id,
+        )
 
-finally:
-    db.close()
+        assert len(user_files) >= 1
+
+        # --------------------------------------------------
+        # GET ALL FILES
+        # --------------------------------------------------
+
+        files = get_files_service(
+            db,
+            limit=100,
+        )
+
+        assert len(files) >= 1
+
+        # --------------------------------------------------
+        # UPDATE FILE
+        # --------------------------------------------------
+
+        updated = update_file_service(
+            db=db,
+            file_id=file.file_id,
+            filename="PRAMAAN-Test-File-Updated.pdf",
+            sensitivity_class="restricted",
+        )
+
+        assert updated is not None
+        assert updated.filename == "PRAMAAN-Test-File-Updated.pdf"
+        assert updated.sensitivity_class == "restricted"
+
+        # --------------------------------------------------
+        # DELETE FILE
+        # --------------------------------------------------
+
+        deleted = delete_file_service(
+            db,
+            file.file_id,
+        )
+
+        assert deleted is True
+
+    finally:
+        db.close()

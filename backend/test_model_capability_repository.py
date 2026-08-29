@@ -30,7 +30,7 @@ def test_create_model_capability_invalid_score_low(db):
 
     with pytest.raises(
         ValueError,
-        match="Score must be between 0 and 1",
+        match="Capability score must be between 0 and 1",
     ):
         create_model_capability_service(
             db=db,
@@ -44,7 +44,7 @@ def test_create_model_capability_invalid_score_high(db):
 
     with pytest.raises(
         ValueError,
-        match="Score must be between 0 and 1",
+        match="Capability score must be between 0 and 1",
     ):
         create_model_capability_service(
             db=db,
@@ -93,7 +93,7 @@ def test_update_model_capability_invalid_score_low(db):
 
     with pytest.raises(
         ValueError,
-        match="Score must be between 0 and 1",
+        match="Capability score must be between 0 and 1",
     ):
         update_model_capability_service(
             db=db,
@@ -107,7 +107,7 @@ def test_update_model_capability_invalid_score_high(db):
 
     with pytest.raises(
         ValueError,
-        match="Score must be between 0 and 1",
+        match="Capability score must be between 0 and 1",
     ):
         update_model_capability_service(
             db=db,

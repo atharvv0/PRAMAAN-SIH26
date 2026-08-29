@@ -23,8 +23,8 @@ def create_model_capability_service(
 
     if score is not None and not 0 <= score <= 1:
         raise ValueError(
-            "Capability score must be between 0 and 1."
-        )
+            "Capability score must be between 0 and 1"
+    )
 
     capability = capability.strip()
 
@@ -109,8 +109,8 @@ def update_model_capability_service(
 
     if score is not None and not 0 <= score <= 1:
         raise ValueError(
-            "Capability score must be between 0 and 1."
-        )
+            "Capability score must be between 0 and 1"
+    )
 
     result = update_capability(
         db=db,

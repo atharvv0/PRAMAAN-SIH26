@@ -1,21 +1,19 @@
-from app.db.session import SessionLocal
+import pytest
 
-from app.services.workspace_service import (
-    create_workspace_service,
-    get_workspace_service,
-    get_workspaces_service,
-    update_workspace_service,
-    delete_workspace_service,
-)
+def test_workspace_service(db):
 
-
-db = SessionLocal()
-
-try:
+    from app.services.workspace_service import (
+        create_workspace_service,
+        get_workspace_service,
+        get_workspaces_service,
+        update_workspace_service,
+        delete_workspace_service,
+    )
 
     # -------------------------------------------------
     # CREATE
     # -------------------------------------------------
+
     workspace = create_workspace_service(
         db=db,
         name="PRAMAAN-Test-Workspace",
@@ -23,37 +21,40 @@ try:
         sensitivity_class="confidential",
     )
 
-    print("Created Workspace:")
-    print("ID:", workspace.workspace_id)
-    print("Name:", workspace.name)
-    print("Description:", workspace.description)
-    print("Sensitivity:", workspace.sensitivity_class)
+    assert workspace.name == "PRAMAAN-Test-Workspace"
+    assert workspace.description == "Workspace service test."
+    assert workspace.sensitivity_class == "confidential"
 
     # -------------------------------------------------
     # GET
     # -------------------------------------------------
+
     found = get_workspace_service(
         db,
         workspace.workspace_id,
     )
 
-    print("\nGet Workspace:")
-    print("Name:", found.name)
+    assert found.workspace_id == workspace.workspace_id
+    assert found.name == "PRAMAAN-Test-Workspace"
 
     # -------------------------------------------------
     # GET ALL
     # -------------------------------------------------
+
     workspaces = get_workspaces_service(
         db,
         limit=100,
     )
 
-    print("\nTotal Workspaces:")
-    print(len(workspaces))
+    assert any(
+        item.workspace_id == workspace.workspace_id
+        for item in workspaces
+    )
 
     # -------------------------------------------------
     # UPDATE
     # -------------------------------------------------
+
     updated = update_workspace_service(
         db=db,
         workspace_id=workspace.workspace_id,
@@ -62,21 +63,27 @@ try:
         sensitivity_class="restricted",
     )
 
-    print("\nUpdated Workspace:")
-    print("Name:", updated.name)
-    print("Description:", updated.description)
-    print("Sensitivity:", updated.sensitivity_class)
+    assert updated.name == "PRAMAAN-Test-Workspace-Updated"
+    assert updated.description == "Updated workspace service test."
+    assert updated.sensitivity_class == "restricted"
 
     # -------------------------------------------------
     # DELETE
     # -------------------------------------------------
+
     deleted = delete_workspace_service(
         db,
         workspace.workspace_id,
     )
 
-    print("\nDeleted Workspace:")
-    print(deleted)
+    assert deleted is True
 
-finally:
-    db.close()
+    # -------------------------------------------------
+    # VERIFY DELETE
+    # -------------------------------------------------
+
+    with pytest.raises(ValueError):
+        get_workspace_service(
+            db,
+            workspace.workspace_id,
+        )

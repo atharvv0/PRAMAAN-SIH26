@@ -1,3 +1,4 @@
+import uuid
 import pytest
 
 from app.services.model_service import (
@@ -42,15 +43,24 @@ def test_create_model_empty_runtime(db):
 
 def test_create_model_duplicate_name(db):
 
+    unique_name = f"duplicate_test_model_{uuid.uuid4().hex}"
+
+    create_model_service(
+        db=db,
+        name=unique_name,
+        runtime="test_runtime",
+    )
+
     with pytest.raises(
         ValueError,
         match="A model with this name already exists",
     ):
         create_model_service(
             db=db,
-            name="existing_model",
+            name=unique_name,
             runtime="test_runtime",
         )
+
 
 def test_get_model_not_found(db):
 

@@ -1,3 +1,5 @@
+from uuid import uuid4
+
 from app.db.session import SessionLocal
 from app.repositories.user_repository import (
     create_user,
@@ -7,36 +9,46 @@ from app.repositories.user_repository import (
 )
 
 
-db = SessionLocal()
+def test_user_repository():
 
-try:
-    user = create_user(
-        db,
-        email="test@pramaan.local",
-        display_name="Test User",
-    )
+    db = SessionLocal()
 
-    print("Created User:")
-    print(user.user_id)
-    print(user.email)
-    print(user.display_name)
+    try:
+        email = f"test-{uuid4().hex}@pramaan.local"
 
-    found = get_user(db, user.user_id)
+        # Create User
+        user = create_user(
+            db,
+            email=email,
+            display_name="Test User",
+        )
 
-    print("\nGet User:")
-    print(found.email)
+        assert user is not None
+        assert user.email == email
+        assert user.display_name == "Test User"
 
-    found_by_email = get_user_by_email(
-        db,
-        "test@pramaan.local",
-    )
+        # Get User
+        found = get_user(
+            db,
+            user.user_id,
+        )
 
-    print("\nGet By Email:")
-    print(found_by_email.display_name)
+        assert found is not None
+        assert found.email == email
 
-    users = get_users(db)
+        # Get By Email
+        found_by_email = get_user_by_email(
+            db,
+            email,
+        )
 
-    print("\nTotal Users:", len(users))
+        assert found_by_email is not None
+        assert found_by_email.user_id == user.user_id
 
-finally:
-    db.close()
+        # Get All Users
+        users = get_users(db)
+
+        assert len(users) >= 1
+
+    finally:
+        db.close()
