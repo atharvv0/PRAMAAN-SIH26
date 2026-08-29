@@ -1,6 +1,5 @@
-import { Navigate, Outlet, createBrowserRouter } from 'react-router-dom'
+import { Navigate, Outlet, createBrowserRouter, useNavigate } from 'react-router-dom'
 import { AppShell } from '@/components/layout/AppShell'
-import { LoginPage } from '@/features/auth/LoginPage'
 import { OverviewPage } from '@/features/dashboard/OverviewPage'
 import { WorkspacesPage } from '@/features/workspaces/WorkspacesPage'
 import { TasksPage } from '@/features/tasks/TasksPage'
@@ -14,50 +13,33 @@ import { ApprovalsPage } from '@/features/approvals/ApprovalsPage'
 import { AuditPage } from '@/features/audit/AuditPage'
 import { ModelsPage } from '@/features/models/ModelsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
+import { LoginPage } from '@/features/auth/LoginPage'
 import { useAuthStore } from '@/store'
+import { EmptyState } from '@/components/common/States'
+import { Button } from '@/components/ui/Button'
 
-function RequireAuth() {
-  const user = useAuthStore((s) => s.user)
-  if (!user) return <Navigate to="/login" replace />
-  return <Outlet />
-}
-
-function GuestOnly() {
-  const user = useAuthStore((s) => s.user)
-  if (user) return <Navigate to="/" replace />
-  return <Outlet />
-}
+function RequireAuth() { const user = useAuthStore((s) => s.user); return user ? <Outlet /> : <Navigate to="/login" replace /> }
+function GuestOnly() { const user = useAuthStore((s) => s.user); return user ? <Navigate to="/" replace /> : <Outlet /> }
+function NotFoundPage() { const navigate = useNavigate(); return <div className="mx-auto max-w-xl py-16"><EmptyState title="Page not found" description="The requested PRAMAAN route does not exist." action={<Button onClick={() => navigate(-1)}>Go back</Button>} /></div> }
 
 export const router = createBrowserRouter([
-  {
-    path: '/login',
-    element: <GuestOnly />,
-    children: [{ index: true, element: <LoginPage /> }],
-  },
-  {
-    path: '/',
-    element: <RequireAuth />,
-    children: [
-      {
-        element: <AppShell />,
-        children: [
-          { index: true, element: <OverviewPage /> },
-          { path: 'workspaces', element: <WorkspacesPage /> },
-          { path: 'tasks', element: <TasksPage /> },
-          { path: 'tasks/new', element: <TaskCreatePage /> },
-          { path: 'runs', element: <RunsPage /> },
-          { path: 'runs/:runId', element: <AgentRunPage /> },
-          { path: 'evidence', element: <EvidencePage /> },
-          { path: 'evidence/:id', element: <EvidencePage /> },
-          { path: 'deliverables', element: <DeliverablesPage /> },
-          { path: 'sovereignty', element: <SovereigntyPage /> },
-          { path: 'approvals', element: <ApprovalsPage /> },
-          { path: 'audit', element: <AuditPage /> },
-          { path: 'models', element: <ModelsPage /> },
-          { path: 'settings', element: <SettingsPage /> },
-        ],
-      },
-    ],
-  },
-  { path: '*', element: <Navigate to="/" replace /> },
+  { path: '/login', element: <GuestOnly />, children: [{ index: true, element: <LoginPage /> }] },
+  { path: '/', element: <RequireAuth />, children: [{ element: <AppShell />, children: [
+    { index: true, element: <OverviewPage /> },
+    { path: 'workspaces', element: <WorkspacesPage /> },
+    { path: 'tasks', element: <TasksPage /> },
+    { path: 'tasks/new', element: <TaskCreatePage /> },
+    { path: 'runs', element: <RunsPage /> },
+    { path: 'runs/:runId', element: <AgentRunPage /> },
+    { path: 'evidence', element: <EvidencePage /> },
+    { path: 'evidence/:id', element: <EvidencePage /> },
+    { path: 'deliverables', element: <DeliverablesPage /> },
+    { path: 'sovereignty', element: <SovereigntyPage /> },
+    { path: 'approvals', element: <ApprovalsPage /> },
+    { path: 'audit', element: <AuditPage /> },
+    { path: 'models', element: <ModelsPage /> },
+    { path: 'settings', element: <SettingsPage /> },
+    { path: '*', element: <NotFoundPage /> },
+  ] }] },
+  { path: '*', element: <Navigate to="/login" replace /> },
 ])

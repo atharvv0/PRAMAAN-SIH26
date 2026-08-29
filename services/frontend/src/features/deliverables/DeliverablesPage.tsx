@@ -10,6 +10,7 @@ import {
   PageHeader,
 } from '@/components/common/States'
 import { useDeliverables } from '@/hooks'
+import { apiUrl } from '@/api'
 import { formatDateTime } from '@/lib/utils'
 
 export function DeliverablesPage() {
@@ -72,15 +73,15 @@ export function DeliverablesPage() {
                 <Td mono>{formatDateTime(d.createdAt)}</Td>
                 <Td>
                   <div className="flex flex-wrap gap-1.5">
-                    <Link to={`/evidence?taskId=${d.taskId}`}>
-                      <Button size="sm">Evidence</Button>
+                    <Link to={`/evidence?taskId=${d.taskId}`} className="inline-flex h-7 items-center border border-border bg-raised px-2.5 text-[11px] font-medium text-text hover:bg-hover">
+                      Evidence
                     </Link>
-                    {d.downloadUrl ? (
-                      <a href={d.downloadUrl} target="_blank" rel="noreferrer">
-                        <Button size="sm">Download</Button>
+                    {d.downloadUrl || d.fileId ? (
+                      <a href={d.downloadUrl ?? apiUrl(`/files/${encodeURIComponent(d.fileId ?? '')}/download`)} target="_blank" rel="noreferrer" download className="inline-flex h-7 items-center border border-border bg-raised px-2.5 text-[11px] font-medium text-text hover:bg-hover">
+                        Download
                       </a>
                     ) : (
-                      <Button size="sm" disabled>Download</Button>
+                      <span className="inline-flex h-7 items-center border border-border px-2.5 text-[11px] text-text-muted opacity-60">Download unavailable</span>
                     )}
                     <Button
                       size="sm"

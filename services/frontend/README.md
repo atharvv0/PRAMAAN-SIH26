@@ -1,43 +1,27 @@
-# services/frontend — PRAMAAN Workbench UI
+# PRAMAAN — Sovereign AI Workbench
 
-The production frontend is the React + TypeScript + Vite application in this directory.
-It is intentionally separated from the backend and other Python services.
+Production React + TypeScript + Vite frontend for the PRAMAAN local backend. The browser talks only to the configured API base URL; no cloud AI provider, analytics, or telemetry service is required by the UI.
 
-## Structure
-
-- `src/` — application routes, pages, components, API client, types and state
-- `public/` — static assets
-- `nginx.conf` — production reverse proxy; `/api/` is forwarded to the backend container
-- `Dockerfile` — two-stage Vite build + nginx runtime
-
-## API mode
-
-The final integration uses `VITE_API_MODE=http`. The browser talks to `/api/v1`, and nginx proxies those requests to the backend. The deterministic mock adapter remains in `src/mocks/` for local UI development/tests, but the production/demo path must use the live backend.
-
-## Run locally
+## Local development
 
 ```bash
 npm ci
 npm run dev
 ```
 
-## Production container
+Set `VITE_API_BASE_URL` when the backend is not served through the same origin. The default is `/api/v1`.
 
-From the repository root:
+## Production build
 
 ```bash
-docker compose up --build frontend backend
+npm run build
+npm run preview
 ```
 
-The workbench should be reachable at the frontend port configured in the root `.env`.
+The frontend uses live backend state in production. It does not silently substitute mock/demo data when the API is unavailable.
 
-## Final integration checklist
+## Frontend access layer
 
-- [ ] Task creation uses `POST /api/v1/tasks`
-- [ ] Run view uses the live run/task event endpoints
-- [ ] Evidence page uses live evidence responses
-- [ ] Approval UI uses live approval endpoints
-- [ ] Deliverables page uses live deliverable responses
-- [ ] Models page shows actual Model Control registry data
-- [ ] Sovereignty page shows actual policy/network data
-- [ ] `VITE_API_MODE=http` in the production/demo build
+When the supplied backend has no server-side identity endpoint, the UI uses a browser-local account layer for controlled product testing. User IDs, emails, profile data, and salted PBKDF2 password hashes remain in the current browser; this is not a replacement for enterprise SSO/OIDC or server-side authorization.
+
+The workbench supports light, dark, and system appearance modes. Light is the default for new browser profiles.

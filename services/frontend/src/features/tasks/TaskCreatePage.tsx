@@ -1,381 +1,207 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { api } from '@/api'
-import { FilePlus2, Loader2, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState, type DragEvent, type FormEvent } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
+import { FilePlus2, FileText, Image, Play, Paperclip, Trash2, UploadCloud } from 'lucide-react'
+import { api, ApiError } from '@/api'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
 import { StatusBadge } from '@/components/ui/StatusBadge'
-import {
-  ErrorState,
-  LoadingState,
-  PageHeader,
-  SectionLabel,
-} from '@/components/common/States'
-import { useCreateTask, useWorkspaces } from '@/hooks'
+import { ErrorState, LoadingState, PageHeader, SectionLabel } from '@/components/common/States'
+import { useCreateTask, useRunTask, useWorkspaces } from '@/hooks'
 import { useAuthStore, useWorkbenchStore } from '@/store'
 import type { TaskFile, TaskFileType } from '@/types/task'
 import { cn, formatBytes } from '@/lib/utils'
 
-const EXAMPLE_INSTRUCTION =
-  'Review the confidential MRPL turnaround inspection package for CDU-101. Extract findings from the scanned inspection report, cross-reference annotated P&ID regions against SOP-MRPL-INSP-042, reconcile thickness / corrosion readings in the measurement workbook, and draft an Approval Note for the Inspection Authority. All processing must remain on-prem; deny external model or network calls.'
-
-type DemoPreset = {
-  name: string
-  type: TaskFileType
-  sizeBytes: number
-  label: string
+interface LocalFile {
+  id: string
+  file: File
+  state: 'pending' | 'uploading' | 'uploaded' | 'failed'
+  stored?: TaskFile
+  error?: string
 }
 
-const DEMO_PRESETS: DemoPreset[] = [
-  {
-    label: 'PDF',
-    name: 'CDU101_Inspection_Report_Scan.pdf',
-    type: 'pdf',
-    sizeBytes: 4_820_441,
-  },
-  {
-    label: 'P&ID',
-    name: 'P&ID_CDU101_Annotated.png',
-    type: 'image',
-    sizeBytes: 2_140_880,
-  },
-  {
-    label: 'XLSX',
-    name: 'Thickness_Corrosion_Readings.xlsx',
-    type: 'spreadsheet',
-    sizeBytes: 186_432,
-  },
-  {
-    label: 'SOP',
-    name: 'SOP-MRPL-INSP-042_Visual_Inspection.docx',
-    type: 'document',
-    sizeBytes: 412_096,
-  },
-]
+const ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.gif,.svg,.xlsx,.xls,.csv,.doc,.docx,.txt,.md'
+const MAX_FILE_BYTES = 100 * 1024 * 1024
 
-export function TaskCreatePage() {
-  const navigate = useNavigate()
-  const user = useAuthStore((s) => s.user)
-  const { workspaceId, setWorkspace } = useWorkbenchStore()
-  const { data: workspaces, isLoading: wsLoading, isError: wsError, refetch } =
-    useWorkspaces()
-  const createTask = useCreateTask()
-
-  const [title, setTitle] = useState('Inspection Package Review')
-  const [instruction, setInstruction] = useState('')
-  const [selectedWs, setSelectedWs] = useState(workspaceId)
-  const [files, setFiles] = useState<TaskFile[]>([])
-  const [uploads, setUploads] = useState<Record<string, File>>({})
-  const [dragOver, setDragOver] = useState(false)
-
-  useEffect(() => {
-    if (workspaces?.length && !workspaces.some((w) => w.id === selectedWs)) {
-      setSelectedWs(workspaces[0].id)
-      setWorkspace(workspaces[0].id, workspaces[0].name)
-    }
-  }, [workspaces, selectedWs, setWorkspace])
-
-  const canSubmit = useMemo(
-    () =>
-      title.trim().length > 0 &&
-      instruction.trim().length > 0 &&
-      selectedWs.length > 0 &&
-      !createTask.isPending,
-    [title, instruction, selectedWs, createTask.isPending],
-  )
-
-  function addDemoFile(preset: DemoPreset) {
-    setFiles((prev) => {
-      if (prev.some((f) => f.name === preset.name)) return prev
-      return [
-        ...prev,
-        {
-          id: `file-${Date.now()}-${preset.type}`,
-          name: preset.name,
-          type: preset.type,
-          sizeBytes: preset.sizeBytes,
-          status: 'pending',
-          localProcessing: true,
-        },
-      ]
-    })
-  }
-
-  function removeFile(id: string) {
-    setFiles((prev) => prev.filter((f) => f.id !== id))
-    setUploads((prev) => { const next = { ...prev }; delete next[id]; return next })
-  }
-
-  function onDropFiles(fileList: FileList | null) {
-    if (!fileList) return
-    const next: TaskFile[] = []
-    const nextUploads: Record<string, File> = {}
-    for (const file of Array.from(fileList)) {
-      const id = `file-${Date.now()}-${file.name}-${Math.random().toString(16).slice(2)}`
-      next.push({ id, name: file.name, type: inferType(file.name), sizeBytes: file.size, status: 'pending', localProcessing: true })
-      nextUploads[id] = file
-    }
-    setFiles((prev) => [...prev, ...next])
-    setUploads((prev) => ({ ...prev, ...nextUploads }))
-  }
-
-  async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    if (!canSubmit) return
-
-    const ws = workspaces?.find((w) => w.id === selectedWs)
-    if (ws) setWorkspace(ws.id, ws.name)
-
-    try {
-      const createdBy = user?.id ?? 'demo.operator@local'
-      const uploaded = [] as TaskFile[]
-      for (const file of files) {
-        const raw = uploads[file.id]
-        if (raw) {
-          const stored = await api.uploadFile(raw, selectedWs, createdBy)
-          uploaded.push({ ...stored, type: inferType(stored.name) })
-        }
-      }
-      const task = await createTask.mutateAsync({
-        title: title.trim(),
-        instruction: instruction.trim(),
-        workspaceId: selectedWs,
-        createdBy,
-        file_ids: uploaded.map((f) => f.id),
-        files: uploaded.length ? uploaded : files.map((f) => ({ ...f, status: 'queued' as const })),
-        sensitivity: 'confidential',
-      })
-      if (task.runId) {
-        if (api.mode === 'http') {
-          await api.runTask(task.id)
-        }
-        navigate(`/runs/${task.runId}`)
-      } else {
-        navigate('/tasks')
-      }
-    } catch {
-      // mutation error surfaced below
-    }
-  }
-
-  if (wsLoading) return <LoadingState label="Loading workspaces…" />
-  if (wsError || !workspaces) {
-    return (
-      <ErrorState
-        title="Workspaces unavailable"
-        onRetry={() => void refetch()}
-      />
-    )
-  }
-
-  return (
-    <div className="space-y-3">
-      <PageHeader
-        eyebrow="Work package"
-        title="Create task"
-        description="Industrial intake — inputs, intent, and execution context for local agent processing."
-      />
-
-      <div className="border border-border bg-panel px-3 py-2 flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-text-muted">
-        <span>
-          Flow:{' '}
-          <span className="text-text-secondary font-medium">Inputs → Intent → Execution</span>
-        </span>
-        <span className="font-mono">Egress deny-by-default</span>
-        <span className="font-mono">Local models only</span>
-      </div>
-
-      <form onSubmit={(e) => void handleSubmit(e)} className="space-y-3">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 border border-border bg-panel lg:divide-x divide-border">
-          {/* INPUTS */}
-          <section className="flex flex-col min-h-[360px] border-b lg:border-b-0 border-border">
-            <SectionLabel>01 · Inputs</SectionLabel>
-            <div className="p-3 flex flex-col gap-3 flex-1">
-              <div
-                onDragOver={(e) => {
-                  e.preventDefault()
-                  setDragOver(true)
-                }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault()
-                  setDragOver(false)
-                  onDropFiles(e.dataTransfer.files)
-                }}
-                className={cn(
-                  'border border-dashed px-3 py-6 text-center transition-colors',
-                  dragOver
-                    ? 'border-accent bg-accent-soft'
-                    : 'border-border bg-canvas',
-                )}
-              >
-                <FilePlus2 className="size-5 text-text-muted mx-auto mb-2" />
-                <p className="text-[12px] text-text-secondary">
-                  Drop real local documents here — processing stays on this host
-                </p>
-                <label className="mt-2 inline-block">
-                  <input
-                    type="file"
-                    multiple
-                    className="sr-only"
-                    onChange={(e) => onDropFiles(e.target.files)}
-                  />
-                  <span className="text-[11px] text-accent cursor-pointer hover:underline">
-                    Browse files
-                  </span>
-                </label>
-              </div>
-
-              <div>
-                <div className="text-micro text-text-muted mb-1.5">Demo attachments</div>
-                <div className="flex flex-wrap gap-1.5">
-                  {DEMO_PRESETS.map((p) => (
-                    <Button
-                      key={p.label}
-                      type="button"
-                      size="sm"
-                      onClick={() => addDemoFile(p)}
-                    >
-                      + {p.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="border border-border flex-1 overflow-auto">
-                {files.length === 0 ? (
-                  <p className="text-[11px] text-text-muted px-3 py-4">
-                    No files attached. Local processing only.
-                  </p>
-                ) : (
-                  <ul className="divide-y divide-border">
-                    {files.map((f) => (
-                      <li
-                        key={f.id}
-                        className="px-2.5 py-2 flex items-start gap-2 text-[12px]"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <div className="text-text font-medium truncate">{f.name}</div>
-                          <div className="flex flex-wrap items-center gap-2 mt-1 text-[10px] text-text-muted">
-                            <span className="uppercase">{f.type}</span>
-                            <span className="font-mono">{formatBytes(f.sizeBytes)}</span>
-                            <StatusBadge status={f.status} compact />
-                            {f.localProcessing ? (
-                              <span className="text-success">Local processing</span>
-                            ) : null}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeFile(f.id)}
-                          className="text-text-muted hover:text-danger p-1"
-                          aria-label={`Remove ${f.name}`}
-                        >
-                          <Trash2 className="size-3.5" />
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
-            </div>
-          </section>
-
-          {/* INTENT */}
-          <section className="flex flex-col min-h-[360px] border-b lg:border-b-0 border-border">
-            <SectionLabel>02 · Intent</SectionLabel>
-            <div className="p-3 flex flex-col gap-3 flex-1">
-              <Field label="Task title">
-                <Input
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  placeholder="e.g. Inspection Package Review"
-                  required
-                />
-              </Field>
-              <Field
-                label="Instruction"
-                hint="Describe extraction, cross-check, and deliverable expectations."
-                className="flex-1"
-              >
-                <Textarea
-                  value={instruction}
-                  onChange={(e) => setInstruction(e.target.value)}
-                  className="min-h-[200px] flex-1"
-                  placeholder="Operator instruction for the local agent…"
-                  required
-                />
-              </Field>
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => setInstruction(EXAMPLE_INSTRUCTION)}
-              >
-                Prefill example instruction
-              </Button>
-            </div>
-          </section>
-
-          {/* EXECUTION CONTEXT */}
-          <section className="flex flex-col min-h-[360px]">
-            <SectionLabel>03 · Execution</SectionLabel>
-            <div className="p-3 flex flex-col gap-3 flex-1">
-              <Field label="Workspace" hint="All processing stays within sovereign boundary.">
-                <Select
-                  value={selectedWs}
-                  onChange={(e) => setSelectedWs(e.target.value)}
-                >
-                  {workspaces.map((w) => (
-                    <option key={w.id} value={w.id}>
-                      {w.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-
-              <div className="border border-border bg-canvas px-3 py-2 text-[12px] space-y-1.5">
-                <div className="text-micro text-text-muted">Policy posture</div>
-                <div className="text-text-secondary">Egress: deny-by-default</div>
-                <div className="text-text-secondary">Models: local Ollama only</div>
-                <div className="text-text-secondary">Audit: recording on submit</div>
-                <div className="text-text-secondary">
-                  Operator: {user?.name ?? 'Unsigned'} ({user?.role ?? '—'})
-                </div>
-              </div>
-
-              <div className="mt-auto space-y-2">
-                {createTask.isError ? (
-                  <p className="text-[11px] text-danger">
-                    Failed to create task. Retry or check local API.
-                  </p>
-                ) : null}
-                <Button
-                  type="submit"
-                  variant="primary"
-                  className="w-full"
-                  disabled={!canSubmit}
-                  leftIcon={
-                    createTask.isPending ? (
-                      <Loader2 className="size-3.5 animate-spin" />
-                    ) : undefined
-                  }
-                >
-                  {createTask.isPending ? 'Queuing…' : 'Submit & open run'}
-                </Button>
-              </div>
-            </div>
-          </section>
-        </div>
-      </form>
-    </div>
-  )
+function makeFileId(file: File) {
+  const unique = typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function' ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  return `${file.name}-${file.size}-${file.lastModified}-${unique}`
 }
 
 function inferType(name: string): TaskFileType {
   const lower = name.toLowerCase()
   if (lower.endsWith('.pdf')) return 'pdf'
-  if (/\.(png|jpe?g|webp|gif)$/.test(lower)) return 'image'
+  if (/\.(png|jpe?g|webp|gif|svg)$/.test(lower)) return 'image'
   if (/\.(xlsx|xls|csv)$/.test(lower)) return 'spreadsheet'
   if (/\.(docx?|txt|md)$/.test(lower)) return 'document'
   return 'other'
+}
+
+export function TaskCreatePage() {
+  const navigate = useNavigate()
+  const user = useAuthStore((s) => s.user)
+  const { workspaceId, setWorkspace } = useWorkbenchStore()
+  const workspaces = useWorkspaces()
+  const create = useCreateTask()
+  const run = useRunTask()
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [title, setTitle] = useState('')
+  const [instruction, setInstruction] = useState('')
+  const [selectedWs, setSelectedWs] = useState(workspaceId)
+  const [sensitivity, setSensitivity] = useState<'internal' | 'confidential' | 'restricted'>('confidential')
+  const [files, setFiles] = useState<LocalFile[]>([])
+  const [dragOver, setDragOver] = useState(false)
+  const [fileError, setFileError] = useState('')
+  const [submitError, setSubmitError] = useState('')
+
+  useEffect(() => {
+    if (!selectedWs && workspaceId) setSelectedWs(workspaceId)
+  }, [selectedWs, workspaceId])
+
+  useEffect(() => {
+    if (!selectedWs) return
+    const workspace = workspaces.data?.find((item) => item.id === selectedWs)
+    if (workspace) setWorkspace(workspace.id, workspace.name)
+  }, [selectedWs, workspaces.data, setWorkspace])
+
+  const canSubmit = useMemo(() => {
+    const hasUsableFile = files.some((entry) => entry.state === 'pending' || entry.state === 'uploaded')
+    const uploading = files.some((entry) => entry.state === 'uploading')
+    return title.trim().length >= 3 && instruction.trim().length >= 10 && Boolean(selectedWs) && hasUsableFile && !uploading && !create.isPending && !run.isPending
+  }, [title, instruction, selectedWs, files, create.isPending, run.isPending])
+
+  function addFiles(list: FileList | null) {
+    if (!list) return
+    setFileError('')
+    const incoming: LocalFile[] = []
+    for (const file of Array.from(list)) {
+      if (file.size <= 0) continue
+      if (file.size > MAX_FILE_BYTES) {
+        setFileError(`${file.name} exceeds the 100 MB browser upload limit.`)
+        continue
+      }
+      const duplicate = files.some((entry) => entry.file.name === file.name && entry.file.size === file.size && entry.file.lastModified === file.lastModified)
+      if (!duplicate) incoming.push({ id: makeFileId(file), file, state: 'pending' })
+    }
+    if (incoming.length) setFiles((current) => [...current, ...incoming])
+  }
+
+  function handleDrop(event: DragEvent<HTMLDivElement>) {
+    event.preventDefault()
+    setDragOver(false)
+    addFiles(event.dataTransfer.files)
+  }
+
+  function removeFile(id: string) {
+    setFiles((current) => current.filter((item) => item.id !== id))
+  }
+
+  async function submit(event: FormEvent) {
+    event.preventDefault()
+    setSubmitError('')
+    if (!canSubmit) {
+      if (!files.length) setSubmitError('Attach at least one source file before creating the task.')
+      return
+    }
+
+    const createdBy = user?.email || user?.id || 'local-session'
+    const uploadedIds: string[] = []
+    const next = [...files]
+
+    try {
+      for (let index = 0; index < next.length; index += 1) {
+        const entry = next[index]
+        if (!entry) continue
+        if (entry.state === 'uploaded' && entry.stored?.id) {
+          uploadedIds.push(entry.stored.id)
+          continue
+        }
+        if (entry.state !== 'pending') continue
+
+        next[index] = { ...entry, state: 'uploading', error: undefined }
+        setFiles([...next])
+        try {
+          const stored = await api.uploadFile(entry.file, selectedWs, createdBy)
+          const normalized = { ...stored, type: inferType(stored.name) }
+          next[index] = { ...entry, state: 'uploaded', stored: normalized }
+          uploadedIds.push(normalized.id)
+          setFiles([...next])
+        } catch (error) {
+          const message = error instanceof ApiError ? error.message : error instanceof Error ? error.message : 'Upload failed.'
+          next[index] = { ...entry, state: 'failed', error: message }
+          setFiles([...next])
+          throw error
+        }
+      }
+
+      if (!uploadedIds.length) throw new Error('No source files were accepted by the local API.')
+
+      const task = await create.mutateAsync({
+        title: title.trim(),
+        instruction: instruction.trim(),
+        workspaceId: selectedWs,
+        createdBy,
+        sensitivity,
+        file_ids: uploadedIds,
+      })
+
+      // Task creation and execution are separate backend operations. Start the
+      // authoritative run explicitly instead of assuming POST /tasks auto-runs.
+      const startedRun = await run.mutateAsync(task.id)
+      navigate(`/runs/${startedRun.id}`)
+    } catch (error) {
+      const message = error instanceof ApiError ? `${error.message}${error.status ? ` (HTTP ${error.status})` : ''}` : error instanceof Error ? error.message : 'The local API rejected the operation.'
+      setSubmitError(message)
+    }
+  }
+
+  if (workspaces.isLoading) return <LoadingState label="Loading workspace context…" />
+  if (workspaces.isError || !workspaces.data) return <ErrorState title="Workspace context unavailable" description="A task cannot be created until the local API returns available workspaces." onRetry={() => void workspaces.refetch()} />
+
+  return (
+    <div className="space-y-4">
+      <PageHeader eyebrow="Work package" title="Create task" description="Define the workload, attach source material, then start an explicit local agent run." actions={<Link to="/tasks" className="inline-flex h-8 items-center border border-border bg-raised px-3 text-[11px] font-medium text-text hover:bg-hover">Cancel</Link>} />
+
+      <form onSubmit={(event) => void submit(event)} className="grid gap-4 lg:grid-cols-[1.15fr_.85fr]">
+        <section className="border border-border bg-panel">
+          <SectionLabel>Task definition</SectionLabel>
+          <div className="space-y-4 p-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Title"><Input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Turnaround inspection review" aria-invalid={title.length > 0 && title.trim().length < 3} /></Field>
+              <Field label="Sensitivity"><Select value={sensitivity} onChange={(e) => setSensitivity(e.target.value as typeof sensitivity)}><option value="internal">Internal</option><option value="confidential">Confidential</option><option value="restricted">Restricted</option></Select></Field>
+            </div>
+            <Field label="Intent / instruction" hint="State the outcome, source context, constraints, and review expectations."><Textarea value={instruction} onChange={(e) => setInstruction(e.target.value)} placeholder="Describe what the local agent should analyze, reconcile, draft, or verify…" /></Field>
+            {submitError ? <ErrorState className="m-0" title="Task operation failed" description={submitError} /> : null}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
+              <div className="text-[11px] text-text-muted">Execution remains under the backend sovereignty policy.</div>
+              <Button type="submit" variant="primary" size="lg" disabled={!canSubmit} leftIcon={<Play className="size-4" />}>{run.isPending ? 'Starting…' : create.isPending ? 'Creating…' : 'Create & start task'}</Button>
+            </div>
+          </div>
+        </section>
+
+        <section className="border border-border bg-panel">
+          <SectionLabel>Source files</SectionLabel>
+          <div className="p-4">
+            <div role="button" tabIndex={0} onClick={() => inputRef.current?.click()} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); inputRef.current?.click() } }} onDragOver={(event) => { event.preventDefault(); setDragOver(true) }} onDragLeave={() => setDragOver(false)} onDrop={handleDrop} className={cn('flex min-h-[210px] cursor-pointer flex-col items-center justify-center rounded-sm border border-dashed px-4 text-center transition-colors', dragOver ? 'border-accent bg-accent-soft' : 'border-border bg-canvas hover:border-border-strong hover:bg-raised')}>
+              <UploadCloud className="size-8 text-accent" aria-hidden />
+              <div className="mt-3 text-[13px] font-semibold text-text">Drag & drop source files here</div>
+              <div className="mt-1 max-w-sm text-[11px] leading-relaxed text-text-muted">or choose files from this device. Files are uploaded only to the configured PRAMAAN API.</div>
+              <span className="mt-4 inline-flex h-8 items-center gap-2 border border-accent/50 bg-accent-soft px-3 text-[11px] font-semibold text-accent"><FilePlus2 className="size-3.5" aria-hidden />Browse files</span>
+              <input ref={inputRef} type="file" multiple accept={ACCEPT} className="sr-only" onChange={(event) => { addFiles(event.target.files); event.currentTarget.value = '' }} />
+            </div>
+            <div className="mt-2 text-[10px] text-text-muted">PDF, images, spreadsheets, Word and text · maximum 100 MB per file</div>
+            {fileError ? <div className="mt-3 border border-danger/35 bg-danger-soft px-3 py-2 text-[10.5px] text-danger" role="alert">{fileError}</div> : null}
+
+            <div className="mt-3 space-y-2">
+              {files.length === 0 ? <div className="border border-border bg-surface px-3 py-3 text-[11px] text-text-muted">No files attached.</div> : files.map((entry) => <div key={entry.id} className="flex items-center gap-3 border border-border bg-surface px-3 py-2.5"><FileIcon type={inferType(entry.file.name)} /><div className="min-w-0 flex-1"><div className="truncate text-[12px] font-medium text-text">{entry.file.name}</div><div className="mt-0.5 flex flex-wrap items-center gap-2 text-[10px] text-text-muted"><span>{formatBytes(entry.file.size)}</span>{entry.state === 'uploaded' && entry.stored ? <StatusBadge status={entry.stored.status} compact showIcon={false} /> : <span>{entry.state}</span>}</div>{entry.error ? <div className="mt-1 text-[10px] text-danger">{entry.error}</div> : null}</div>{entry.state !== 'uploading' ? <button type="button" className="grid size-7 shrink-0 place-items-center text-text-muted hover:bg-raised hover:text-danger" onClick={() => removeFile(entry.id)} aria-label={`Remove ${entry.file.name}`}><Trash2 className="size-3.5" aria-hidden /></button> : null}</div>)}
+            </div>
+            <div className="mt-4 border-t border-border pt-3 text-[10.5px] leading-relaxed text-text-muted">The backend remains authoritative for content acceptance, storage, sovereignty policy, model routing, evidence, and audit.</div>
+          </div>
+        </section>
+      </form>
+    </div>
+  )
+}
+
+function FileIcon({ type }: { type: TaskFileType }) {
+  return type === 'image' ? <Image className="size-4 text-accent" aria-hidden /> : type === 'pdf' || type === 'document' ? <FileText className="size-4 text-accent" aria-hidden /> : <Paperclip className="size-4 text-accent" aria-hidden />
 }

@@ -1,7 +1,7 @@
-from security.policy import check_tool_access
-from security.rbac import Role
-from security.tools import Tool
-from security.network import request_network_access
+from services.governance.security.policy import check_tool_access
+from services.governance.security.rbac import Role
+from services.governance.security.tools import Tool
+from services.governance.security.network import request_network_access
 
 
 def main():

@@ -1,24 +1,21 @@
-import { useNavigate } from 'react-router-dom'
-import { Button } from '@/components/ui/Button'
-import {
-  MetaRow,
-  PageHeader,
-  SectionLabel,
-} from '@/components/common/States'
-import { SovereigntyIndicator } from '@/components/common/Indicators'
-import { api } from '@/api'
-import { useAuthStore, useWorkbenchStore } from '@/store'
-import { cn } from '@/lib/utils'
+import { useNavigate } from "react-router-dom";
+
+import { MetaRow, PageHeader, SectionLabel } from "@/components/common/States";
+import { SovereigntyIndicator } from "@/components/common/Indicators";
+import { api } from "@/api";
+import { useAuthStore, useWorkbenchStore } from "@/store";
+import { cn } from "@/lib/utils";
 
 export function SettingsPage() {
-  const navigate = useNavigate()
-  const user = useAuthStore((s) => s.user)
-  const signOut = useAuthStore((s) => s.signOut)
-  const { demoMode, setDemoMode, workspaceName, workspaceId } = useWorkbenchStore()
+  const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const signOut = useAuthStore((s) => s.signOut);
+  const { demoMode, setDemoMode, workspaceName, workspaceId } =
+    useWorkbenchStore();
 
   function handleSignOut() {
-    signOut()
-    navigate('/login')
+    signOut();
+    navigate("/login");
   }
 
   return (
@@ -32,9 +29,9 @@ export function SettingsPage() {
       <section className="border border-border bg-panel">
         <SectionLabel>Session</SectionLabel>
         <dl className="px-3 py-2">
-          <MetaRow label="Operator" value={user?.name ?? 'Unsigned'} />
-          <MetaRow label="Role" value={user?.role ?? '—'} />
-          <MetaRow label="Org" value={user?.org ?? '—'} />
+          <MetaRow label="Operator" value={user?.name ?? "Unsigned"} />
+          <MetaRow label="Role" value={user?.role ?? "—"} />
+          <MetaRow label="Org" value={user?.org ?? "—"} />
           <MetaRow label="Workspace" value={workspaceName} />
           <MetaRow label="Workspace ID" value={workspaceId} mono />
         </dl>
@@ -49,10 +46,12 @@ export function SettingsPage() {
         <SectionLabel>Demo mode</SectionLabel>
         <div className="px-3 py-3 flex items-center justify-between gap-4">
           <div>
-            <div className="text-[13px] text-text font-medium">Use demo dataset</div>
+            <div className="text-[13px] text-text font-medium">
+              Use demo dataset
+            </div>
             <p className="text-[11px] text-text-muted mt-0.5 leading-relaxed">
-              When enabled, the UI is backed by the local mock adapter and SIH demo
-              inspection package.
+              When enabled, the UI is backed by the local mock adapter and SIH
+              demo inspection package.
             </p>
           </div>
           <button
@@ -61,16 +60,16 @@ export function SettingsPage() {
             aria-checked={demoMode}
             onClick={() => setDemoMode(!demoMode)}
             className={cn(
-              'relative h-7 w-12 shrink-0 border transition-colors',
+              "relative h-7 w-12 shrink-0 border transition-colors",
               demoMode
-                ? 'bg-accent-soft border-accent/50'
-                : 'bg-raised border-border',
+                ? "bg-accent-soft border-accent/50"
+                : "bg-raised border-border",
             )}
           >
             <span
               className={cn(
-                'absolute top-0.5 size-5 bg-text transition-[left]',
-                demoMode ? 'left-[22px] bg-accent' : 'left-0.5',
+                "absolute top-0.5 size-5 bg-text transition-[left]",
+                demoMode ? "left-[22px] bg-accent" : "left-0.5",
               )}
             />
           </button>
@@ -82,9 +81,7 @@ export function SettingsPage() {
         <dl className="px-3 py-2">
           <MetaRow
             label="API mode"
-            value={
-              <span className="font-mono uppercase">{api.mode}</span>
-            }
+            value={<span className="font-mono uppercase">{api.mode}</span>}
           />
           <MetaRow
             label="Sovereignty"
@@ -96,10 +93,10 @@ export function SettingsPage() {
           />
           <MetaRow
             label="Demo banner"
-            value={demoMode ? 'Visible in shell' : 'Hidden'}
+            value={demoMode ? "Visible in shell" : "Hidden"}
           />
         </dl>
       </section>
     </div>
-  )
+  );
 }

@@ -10,7 +10,7 @@ from services.orchestrator.state_graph.agent_state import AgentState
 from services.orchestrator.state_graph.executor import run_plan
 from services.orchestrator.tools.base import ToolRegistry
 from services.orchestrator.tools.examples import ReadFileTool
-from services.orchestrator.tools.model_backed import SummarizeTextModelTool
+from services.orchestrator.tools.model_backed import ReasoningModelTool, SummarizeTextModelTool
 
 SAMPLE_FILE = "data/samples/demo/sample_note.txt"
 
@@ -19,6 +19,10 @@ def test_model_backed_summarize_tool_runs_end_to_end():
     registry = ToolRegistry()
     registry.register(ReadFileTool())
     registry.register(SummarizeTextModelTool())
+    # create_plan() for a file-backed "summarize" intent now always finishes
+    # with a real model.reason answer step (3 steps total), not just
+    # read+summarize -- that step must be registered too.
+    registry.register(ReasoningModelTool())
 
     plan = create_plan(task_id="task_model_1", intent="summarize this file", file_path=SAMPLE_FILE)
     # Swap the naive summarizer for the model-backed one without touching the

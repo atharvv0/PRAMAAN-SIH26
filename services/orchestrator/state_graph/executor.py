@@ -396,14 +396,35 @@ def run_plan(
         step.status == StepStatus.DONE
         for step in state.plan.steps
     ):
+        tool_outputs = [
+            tool_call.output
+            for tool_call in state.tool_calls
+            if tool_call.output is not None
+        ]
+
+        # Prefer the final reasoning/model output as the user-facing answer;
+        # otherwise use the last summary/content result, then the raw tool trace.
+        response_text = None
+        for output in reversed(tool_outputs):
+            if isinstance(output, dict):
+                candidate = output.get("content") or output.get("answer")
+                if isinstance(candidate, str) and candidate.strip():
+                    response_text = candidate.strip()
+                    break
+                candidate = output.get("summary")
+                if isinstance(candidate, str) and candidate.strip():
+                    response_text = candidate.strip()
+                    break
+
         state.final_output = {
             "task_id": state.task_id,
+            "goal": state.plan.goal,
+            "response": response_text,
             "completed_steps": state.completed_steps,
-            "tool_outputs": [
-                tool_call.output
-                for tool_call in state.tool_calls
-                if tool_call.output is not None
-            ],
+            "tool_outputs": tool_outputs,
+            "evidence": [e.model_dump() for e in state.evidence],
+            "model_calls": [m.model_dump() for m in state.model_calls],
+            "approval_status": state.approval_status,
         }
 
         _emit(

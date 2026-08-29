@@ -1,71 +1,75 @@
-import { useMemo, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { api } from '@/api'
-import { FilePlus2, Loader2, Trash2 } from 'lucide-react'
-import { Button } from '@/components/ui/Button'
-import { Field, Input, Select, Textarea } from '@/components/ui/Field'
-import { StatusBadge } from '@/components/ui/StatusBadge'
+import { useMemo, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
+import { api } from "@/api";
+import { FilePlus2, Loader2, Trash2 } from "lucide-react";
+
+import { Field, Input, Select, Textarea } from "@/components/ui/Field";
+import { StatusBadge } from "@/components/ui/StatusBadge";
 import {
   ErrorState,
   LoadingState,
   PageHeader,
   SectionLabel,
-} from '@/components/common/States'
-import { useCreateTask, useWorkspaces } from '@/hooks'
-import { useAuthStore, useWorkbenchStore } from '@/store'
-import type { TaskFile, TaskFileType } from '@/types/task'
-import { cn, formatBytes } from '@/lib/utils'
+} from "@/components/common/States";
+import { useCreateTask, useWorkspaces } from "@/hooks";
+import { useAuthStore, useWorkbenchStore } from "@/store";
+import type { TaskFile, TaskFileType } from "@/types/task";
+import { cn, formatBytes } from "@/lib/utils";
 
 const EXAMPLE_INSTRUCTION =
-  'Review the confidential MRPL turnaround inspection package for CDU-101. Extract findings from the scanned inspection report, cross-reference annotated P&ID regions against SOP-MRPL-INSP-042, reconcile thickness / corrosion readings in the measurement workbook, and draft an Approval Note for the Inspection Authority. All processing must remain on-prem; deny external model or network calls.'
+  "Review the confidential MRPL turnaround inspection package for CDU-101. Extract findings from the scanned inspection report, cross-reference annotated P&ID regions against SOP-MRPL-INSP-042, reconcile thickness / corrosion readings in the measurement workbook, and draft an Approval Note for the Inspection Authority. All processing must remain on-prem; deny external model or network calls.";
 
 type DemoPreset = {
-  name: string
-  type: TaskFileType
-  sizeBytes: number
-  label: string
-}
+  name: string;
+  type: TaskFileType;
+  sizeBytes: number;
+  label: string;
+};
 
 const DEMO_PRESETS: DemoPreset[] = [
   {
-    label: 'PDF',
-    name: 'CDU101_Inspection_Report_Scan.pdf',
-    type: 'pdf',
+    label: "PDF",
+    name: "CDU101_Inspection_Report_Scan.pdf",
+    type: "pdf",
     sizeBytes: 4_820_441,
   },
   {
-    label: 'P&ID',
-    name: 'P&ID_CDU101_Annotated.png',
-    type: 'image',
+    label: "P&ID",
+    name: "P&ID_CDU101_Annotated.png",
+    type: "image",
     sizeBytes: 2_140_880,
   },
   {
-    label: 'XLSX',
-    name: 'Thickness_Corrosion_Readings.xlsx',
-    type: 'spreadsheet',
+    label: "XLSX",
+    name: "Thickness_Corrosion_Readings.xlsx",
+    type: "spreadsheet",
     sizeBytes: 186_432,
   },
   {
-    label: 'SOP',
-    name: 'SOP-MRPL-INSP-042_Visual_Inspection.docx',
-    type: 'document',
+    label: "SOP",
+    name: "SOP-MRPL-INSP-042_Visual_Inspection.docx",
+    type: "document",
     sizeBytes: 412_096,
   },
-]
+];
 
 export function TaskCreatePage() {
-  const navigate = useNavigate()
-  const user = useAuthStore((s) => s.user)
-  const { workspaceId, setWorkspace } = useWorkbenchStore()
-  const { data: workspaces, isLoading: wsLoading, isError: wsError, refetch } =
-    useWorkspaces()
-  const createTask = useCreateTask()
+  const navigate = useNavigate();
+  const user = useAuthStore((s) => s.user);
+  const { workspaceId, setWorkspace } = useWorkbenchStore();
+  const {
+    data: workspaces,
+    isLoading: wsLoading,
+    isError: wsError,
+    refetch,
+  } = useWorkspaces();
+  const createTask = useCreateTask();
 
-  const [title, setTitle] = useState('Inspection Package Review')
-  const [instruction, setInstruction] = useState('')
-  const [selectedWs, setSelectedWs] = useState(workspaceId)
-  const [files, setFiles] = useState<TaskFile[]>([])
-  const [dragOver, setDragOver] = useState(false)
+  const [title, setTitle] = useState("Inspection Package Review");
+  const [instruction, setInstruction] = useState("");
+  const [selectedWs, setSelectedWs] = useState(workspaceId);
+  const [files, setFiles] = useState<TaskFile[]>([]);
+  const [dragOver, setDragOver] = useState(false);
 
   const canSubmit = useMemo(
     () =>
@@ -74,11 +78,11 @@ export function TaskCreatePage() {
       selectedWs.length > 0 &&
       !createTask.isPending,
     [title, instruction, selectedWs, createTask.isPending],
-  )
+  );
 
   function addDemoFile(preset: DemoPreset) {
     setFiles((prev) => {
-      if (prev.some((f) => f.name === preset.name)) return prev
+      if (prev.some((f) => f.name === preset.name)) return prev;
       return [
         ...prev,
         {
@@ -86,70 +90,70 @@ export function TaskCreatePage() {
           name: preset.name,
           type: preset.type,
           sizeBytes: preset.sizeBytes,
-          status: 'pending',
+          status: "pending",
           localProcessing: true,
         },
-      ]
-    })
+      ];
+    });
   }
 
   function removeFile(id: string) {
-    setFiles((prev) => prev.filter((f) => f.id !== id))
+    setFiles((prev) => prev.filter((f) => f.id !== id));
   }
 
   function onDropFiles(fileList: FileList | null) {
-    if (!fileList) return
-    const next: TaskFile[] = []
+    if (!fileList) return;
+    const next: TaskFile[] = [];
     for (const file of Array.from(fileList)) {
-      const type = inferType(file.name)
+      const type = inferType(file.name);
       next.push({
         id: `file-${Date.now()}-${file.name}`,
         name: file.name,
         type,
         sizeBytes: file.size,
-        status: 'pending',
+        status: "pending",
         localProcessing: true,
-      })
+      });
     }
-    setFiles((prev) => [...prev, ...next])
+    setFiles((prev) => [...prev, ...next]);
   }
 
   async function handleSubmit(e: FormEvent) {
-    e.preventDefault()
-    if (!canSubmit) return
+    e.preventDefault();
+    if (!canSubmit) return;
 
-    const ws = workspaces?.find((w) => w.id === selectedWs)
-    if (ws) setWorkspace(ws.id, ws.name)
+    const ws = workspaces?.find((w) => w.id === selectedWs);
+    if (ws) setWorkspace(ws.id, ws.name);
 
     try {
       const task = await createTask.mutateAsync({
         title: title.trim(),
         instruction: instruction.trim(),
         workspaceId: selectedWs,
-        createdBy: user?.id ?? 'demo.operator@local',
-        files: files.map((f) => ({ ...f, status: 'queued' as const })),
-      })
+        createdBy: user?.id ?? "demo.operator@local",
+        files: files.map((f) => ({ ...f, status: "queued" as const })),
+      });
       if (task.runId) {
-        if (api.mode === 'http') {
-          await api.runTask(task.id)
+        if (api.mode === "http") {
+          await api.runTask(task.id);
         }
-        navigate(`/runs/${task.runId}`)
+        navigate(`/runs/${task.runId}`);
       } else {
-        navigate('/tasks')
+        navigate("/tasks");
       }
     } catch {
       // mutation error surfaced below
     }
   }
 
-  if (wsLoading) return <LoadingState label="Loading workspaces…" />
+  if (wsLoading) return <LoadingState label="Loading workspaces…" />;
   if (wsError || !workspaces) {
     return (
       <ErrorState
         title="Workspaces unavailable"
         onRetry={() => void refetch()}
       />
-    )
+    );
   }
 
   return (
@@ -162,8 +166,10 @@ export function TaskCreatePage() {
 
       <div className="border border-border bg-panel px-3 py-2 flex flex-wrap gap-x-6 gap-y-1 text-[11px] text-text-muted">
         <span>
-          Flow:{' '}
-          <span className="text-text-secondary font-medium">Inputs → Intent → Execution</span>
+          Flow:{" "}
+          <span className="text-text-secondary font-medium">
+            Inputs → Intent → Execution
+          </span>
         </span>
         <span className="font-mono">Egress deny-by-default</span>
         <span className="font-mono">Local models only</span>
@@ -177,20 +183,20 @@ export function TaskCreatePage() {
             <div className="p-3 flex flex-col gap-3 flex-1">
               <div
                 onDragOver={(e) => {
-                  e.preventDefault()
-                  setDragOver(true)
+                  e.preventDefault();
+                  setDragOver(true);
                 }}
                 onDragLeave={() => setDragOver(false)}
                 onDrop={(e) => {
-                  e.preventDefault()
-                  setDragOver(false)
-                  onDropFiles(e.dataTransfer.files)
+                  e.preventDefault();
+                  setDragOver(false);
+                  onDropFiles(e.dataTransfer.files);
                 }}
                 className={cn(
-                  'border border-dashed px-3 py-6 text-center transition-colors',
+                  "border border-dashed px-3 py-6 text-center transition-colors",
                   dragOver
-                    ? 'border-accent bg-accent-soft'
-                    : 'border-border bg-canvas',
+                    ? "border-accent bg-accent-soft"
+                    : "border-border bg-canvas",
                 )}
               >
                 <FilePlus2 className="size-5 text-text-muted mx-auto mb-2" />
@@ -211,7 +217,9 @@ export function TaskCreatePage() {
               </div>
 
               <div>
-                <div className="text-micro text-text-muted mb-1.5">Demo attachments</div>
+                <div className="text-micro text-text-muted mb-1.5">
+                  Demo attachments
+                </div>
                 <div className="flex flex-wrap gap-1.5">
                   {DEMO_PRESETS.map((p) => (
                     <Button
@@ -239,13 +247,19 @@ export function TaskCreatePage() {
                         className="px-2.5 py-2 flex items-start gap-2 text-[12px]"
                       >
                         <div className="min-w-0 flex-1">
-                          <div className="text-text font-medium truncate">{f.name}</div>
+                          <div className="text-text font-medium truncate">
+                            {f.name}
+                          </div>
                           <div className="flex flex-wrap items-center gap-2 mt-1 text-[10px] text-text-muted">
                             <span className="uppercase">{f.type}</span>
-                            <span className="font-mono">{formatBytes(f.sizeBytes)}</span>
+                            <span className="font-mono">
+                              {formatBytes(f.sizeBytes)}
+                            </span>
                             <StatusBadge status={f.status} compact />
                             {f.localProcessing ? (
-                              <span className="text-success">Local processing</span>
+                              <span className="text-success">
+                                Local processing
+                              </span>
                             ) : null}
                           </div>
                         </div>
@@ -304,7 +318,10 @@ export function TaskCreatePage() {
           <section className="flex flex-col min-h-[360px]">
             <SectionLabel>03 · Execution</SectionLabel>
             <div className="p-3 flex flex-col gap-3 flex-1">
-              <Field label="Workspace" hint="All processing stays within sovereign boundary.">
+              <Field
+                label="Workspace"
+                hint="All processing stays within sovereign boundary."
+              >
                 <Select
                   value={selectedWs}
                   onChange={(e) => setSelectedWs(e.target.value)}
@@ -319,11 +336,17 @@ export function TaskCreatePage() {
 
               <div className="border border-border bg-canvas px-3 py-2 text-[12px] space-y-1.5">
                 <div className="text-micro text-text-muted">Policy posture</div>
-                <div className="text-text-secondary">Egress: deny-by-default</div>
-                <div className="text-text-secondary">Models: local / deterministic only</div>
-                <div className="text-text-secondary">Audit: recording on submit</div>
                 <div className="text-text-secondary">
-                  Operator: {user?.name ?? 'Unsigned'} ({user?.role ?? '—'})
+                  Egress: deny-by-default
+                </div>
+                <div className="text-text-secondary">
+                  Models: local / deterministic only
+                </div>
+                <div className="text-text-secondary">
+                  Audit: recording on submit
+                </div>
+                <div className="text-text-secondary">
+                  Operator: {user?.name ?? "Unsigned"} ({user?.role ?? "—"})
                 </div>
               </div>
 
@@ -344,7 +367,7 @@ export function TaskCreatePage() {
                     ) : undefined
                   }
                 >
-                  {createTask.isPending ? 'Queuing…' : 'Submit & open run'}
+                  {createTask.isPending ? "Queuing…" : "Submit & open run"}
                 </Button>
               </div>
             </div>
@@ -352,14 +375,14 @@ export function TaskCreatePage() {
         </div>
       </form>
     </div>
-  )
+  );
 }
 
 function inferType(name: string): TaskFileType {
-  const lower = name.toLowerCase()
-  if (lower.endsWith('.pdf')) return 'pdf'
-  if (/\.(png|jpe?g|webp|gif)$/.test(lower)) return 'image'
-  if (/\.(xlsx|xls|csv)$/.test(lower)) return 'spreadsheet'
-  if (/\.(docx?|txt|md)$/.test(lower)) return 'document'
-  return 'other'
+  const lower = name.toLowerCase();
+  if (lower.endsWith(".pdf")) return "pdf";
+  if (/\.(png|jpe?g|webp|gif)$/.test(lower)) return "image";
+  if (/\.(xlsx|xls|csv)$/.test(lower)) return "spreadsheet";
+  if (/\.(docx?|txt|md)$/.test(lower)) return "document";
+  return "other";
 }

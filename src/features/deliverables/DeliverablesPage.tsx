@@ -1,20 +1,20 @@
-import { Fragment, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { StatusBadge } from '@/components/ui/StatusBadge'
-import { Button } from '@/components/ui/Button'
-import { DataTable, Td } from '@/components/common/DataTable'
+import { Fragment, useState } from "react";
+import { Link } from "react-router-dom";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+
+import { DataTable, Td } from "@/components/common/DataTable";
 import {
   EmptyState,
   ErrorState,
   LoadingState,
   PageHeader,
-} from '@/components/common/States'
-import { useDeliverables } from '@/hooks'
-import { formatDateTime } from '@/lib/utils'
+} from "@/components/common/States";
+import { useDeliverables } from "@/hooks";
+import { formatDateTime } from "@/lib/utils";
 
 export function DeliverablesPage() {
-  const { data, isLoading, isError, refetch } = useDeliverables()
-  const [openProvenance, setOpenProvenance] = useState<string | null>(null)
+  const { data, isLoading, isError, refetch } = useDeliverables();
+  const [openProvenance, setOpenProvenance] = useState<string | null>(null);
 
   return (
     <div className="space-y-3">
@@ -39,14 +39,14 @@ export function DeliverablesPage() {
       {!isLoading && !isError && data && data.length > 0 ? (
         <DataTable
           columns={[
-            'Name',
-            'Type',
-            'Task',
-            'Status',
-            'Approval',
-            'Evidence',
-            'Created',
-            'Actions',
+            "Name",
+            "Type",
+            "Task",
+            "Status",
+            "Approval",
+            "Evidence",
+            "Created",
+            "Actions",
           ]}
         >
           {data.map((d) => (
@@ -54,10 +54,14 @@ export function DeliverablesPage() {
               <tr className="hover:bg-raised/40">
                 <Td>
                   <div className="font-medium text-text">{d.name}</div>
-                  <div className="font-mono text-[10px] text-text-muted">{d.id}</div>
+                  <div className="font-mono text-[10px] text-text-muted">
+                    {d.id}
+                  </div>
                 </Td>
                 <Td>
-                  <span className="uppercase text-[11px] text-text-muted">{d.type}</span>
+                  <span className="uppercase text-[11px] text-text-muted">
+                    {d.type}
+                  </span>
                 </Td>
                 <Td>{d.taskTitle}</Td>
                 <Td>
@@ -65,7 +69,7 @@ export function DeliverablesPage() {
                 </Td>
                 <Td>
                   <span className="text-[11px] capitalize text-text-secondary">
-                    {d.approvalStatus.replace(/_/g, ' ')}
+                    {d.approvalStatus.replace(/_/g, " ")}
                   </span>
                 </Td>
                 <Td mono>{d.evidenceCount}</Td>
@@ -99,7 +103,9 @@ export function DeliverablesPage() {
                     colSpan={8}
                     className="px-3 py-2.5 text-[11.5px] text-text-secondary leading-relaxed border-t border-border"
                   >
-                    <span className="text-micro text-text-muted mr-2">Provenance</span>
+                    <span className="text-micro text-text-muted mr-2">
+                      Provenance
+                    </span>
                     {d.provenanceSummary}
                   </td>
                 </tr>
@@ -109,5 +115,5 @@ export function DeliverablesPage() {
         </DataTable>
       ) : null}
     </div>
-  )
+  );
 }

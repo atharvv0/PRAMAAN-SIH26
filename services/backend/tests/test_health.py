@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from ..main import app
+from ..app.main import app
 
 client = TestClient(app)
 
@@ -23,13 +23,45 @@ def test_create_and_get_task():
     assert get.json()["task_id"] == task_id
 
 
-def test_run_multimodal_intent_surfaces_evidence():
+def test_run_multimodal_intent_surfaces_evidence(monkeypatch):
     import os
 
     sample_path = os.path.join(
         os.path.dirname(__file__), "..", "..", "..", "data", "samples", "demo", "sample_note.txt"
     )
     sample_path = os.path.abspath(sample_path)
+
+    # The real OCR pipeline (services/knowledge/ocr_vlm/ocr_tool.py, tool id
+    # "ocr.process") calls a local Ollama vision model over HTTP -- there is
+    # no such server in this test environment. Stub the VLM adapter's
+    # invoke() so this test can verify the orchestrator's real
+    # plan -> tool -> evidence wiring without needing a live model server.
+    # This was previously asserting the tool id "ocr.process_naive", a
+    # demo-only placeholder (services/orchestrator/tools/examples.py) that
+    # is no longer registered now that the real OCR tool exists.
+    def _fake_vlm_invoke(self, image_path, prompt=""):
+        text = "Synthetic OCR output for offline testing."
+        return {
+            "content": text,
+            "path": image_path,
+            "model_id": self.id,
+            "latency_ms": 1,
+            "evidence": [
+                {
+                    "claim": text,
+                    "source": image_path,
+                    "page_or_region": None,
+                    "model": self.id,
+                    "confidence": None,
+                    "validation_state": "unverified",
+                }
+            ],
+        }
+
+    monkeypatch.setattr(
+        "services.knowledge.ocr_vlm.ollama_vlm_adapter.OllamaVlmAdapter.invoke",
+        _fake_vlm_invoke,
+    )
 
     create = client.post(
         "/api/v1/tasks",
@@ -42,7 +74,7 @@ def test_run_multimodal_intent_surfaces_evidence():
     body = run.json()
     assert body["status"] == "completed"
     assert len(body["evidence"]) == 1
-    assert body["evidence"][0]["tool"] == "ocr.process_naive"
+    assert body["evidence"][0]["tool"] == "ocr.process"
 
 
 def test_approval_flow_pauses_then_resumes_via_approve_endpoint():
@@ -57,7 +89,10 @@ def test_approval_flow_pauses_then_resumes_via_approve_endpoint():
     assert approve.status_code == 200
     body = approve.json()
     assert body["status"] == "completed"
-    assert len(body["completed_steps"]) == 2
+    # A fileless "approval note" intent produces a single, approval-gated
+    # model.reason step (see create_plan()'s generic branch in
+    # services/orchestrator/planner/planner.py) -- not two steps.
+    assert len(body["completed_steps"]) == 1
 
 
 def test_network_intent_is_denied_and_never_calls_the_tool():

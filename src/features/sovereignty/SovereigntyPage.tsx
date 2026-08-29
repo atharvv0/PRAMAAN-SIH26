@@ -1,29 +1,33 @@
-import type { ReactNode } from 'react'
+import type { ReactNode } from "react";
 import {
   EmptyState,
   ErrorState,
   LoadingState,
   PageHeader,
   SectionLabel,
-} from '@/components/common/States'
-import { SovereigntyIndicator } from '@/components/common/Indicators'
-import { useNetworkEvents, useSovereignty } from '@/hooks'
-import { cn, formatClock } from '@/lib/utils'
+} from "@/components/common/States";
+import { SovereigntyIndicator } from "@/components/common/Indicators";
+import { useNetworkEvents, useSovereignty } from "@/hooks";
+import { cn, formatClock } from "@/lib/utils";
 
 const POLICY_PIPELINE = [
-  { id: 'configure', label: 'Configure', state: 'ACTIVE' },
-  { id: 'enforce', label: 'Enforce', state: 'ACTIVE' },
-  { id: 'observe', label: 'Observe', state: 'ACTIVE' },
-  { id: 'audit', label: 'Audit', state: 'ACTIVE' },
-  { id: 'demonstrate', label: 'Demonstrate', state: 'LIVE' },
-] as const
+  { id: "configure", label: "Configure", state: "ACTIVE" },
+  { id: "enforce", label: "Enforce", state: "ACTIVE" },
+  { id: "observe", label: "Observe", state: "ACTIVE" },
+  { id: "audit", label: "Audit", state: "ACTIVE" },
+  { id: "demonstrate", label: "Demonstrate", state: "LIVE" },
+] as const;
 
 export function SovereigntyPage() {
-  const sovQuery = useSovereignty()
-  const netQuery = useNetworkEvents()
+  const sovQuery = useSovereignty();
+  const netQuery = useNetworkEvents();
+  const retrySovereignty = () => {
+    void sovQuery.refetch();
+    void netQuery.refetch();
+  };
 
   if (sovQuery.isLoading || netQuery.isLoading) {
-    return <LoadingState label="Loading sovereignty console…" />
+    return <LoadingState label="Loading sovereignty console…" />;
   }
 
   if (sovQuery.isError || !sovQuery.data) {
@@ -32,12 +36,12 @@ export function SovereigntyPage() {
         title="Sovereignty status unavailable"
         onRetry={() => void sovQuery.refetch()}
       />
-    )
+    );
   }
 
-  const sov = sovQuery.data
-  const events = netQuery.data ?? []
-  const blockedEvents = events.filter((e) => e.decision === 'blocked')
+  const sov = sovQuery.data;
+  const events = netQuery.data ?? [];
+  const blockedEvents = events.filter((e) => e.decision === "blocked");
 
   return (
     <div className="space-y-3">
@@ -55,23 +59,23 @@ export function SovereigntyPage() {
             <div
               key={stage.id}
               className={cn(
-                'px-3 py-3 border-border',
-                i < POLICY_PIPELINE.length - 1 && 'sm:border-r',
-                i % 2 === 0 && 'border-r sm:border-r',
-                i < 2 && 'border-b sm:border-b-0',
-                i === 2 && 'border-b sm:border-b-0 col-span-2 sm:col-span-1',
+                "px-3 py-3 border-border",
+                i < POLICY_PIPELINE.length - 1 && "sm:border-r",
+                i % 2 === 0 && "border-r sm:border-r",
+                i < 2 && "border-b sm:border-b-0",
+                i === 2 && "border-b sm:border-b-0 col-span-2 sm:col-span-1",
               )}
             >
               <div className="font-mono text-[10px] text-text-muted">
-                {String(i + 1).padStart(2, '0')}
+                {String(i + 1).padStart(2, "0")}
               </div>
               <div className="text-[13px] font-semibold text-text mt-0.5">
                 {stage.label}
               </div>
               <div
                 className={cn(
-                  'text-[10px] font-semibold mt-1.5 tracking-wide',
-                  stage.state === 'LIVE' ? 'text-running' : 'text-success',
+                  "text-[10px] font-semibold mt-1.5 tracking-wide",
+                  stage.state === "LIVE" ? "text-running" : "text-success",
                 )}
               >
                 {stage.state}
@@ -86,7 +90,7 @@ export function SovereigntyPage() {
           <SectionLabel>Network boundary</SectionLabel>
           <div className="p-3 space-y-3">
             <div className="flex items-center gap-2">
-              <SovereigntyIndicator active={sov.mode === 'active'} />
+              <SovereigntyIndicator active={sov.mode === "active"} />
               <span className="text-[11px] text-text-secondary uppercase tracking-wide">
                 {sov.mode}
               </span>
@@ -95,21 +99,27 @@ export function SovereigntyPage() {
             <div className="border border-border bg-canvas divide-y divide-border text-[12px]">
               <BoundaryRow
                 label="Status"
-                value={<span className="text-success font-semibold">ACTIVE</span>}
+                value={
+                  <span className="text-success font-semibold">ACTIVE</span>
+                }
               />
               <BoundaryRow
                 label="Egress"
                 value={
                   <span className="text-blocked font-semibold tracking-wide">
-                    {sov.egressPolicy === 'deny_by_default'
-                      ? 'DENY BY DEFAULT'
-                      : 'ALLOWLIST'}
+                    {sov.egressPolicy === "deny_by_default"
+                      ? "DENY BY DEFAULT"
+                      : "ALLOWLIST"}
                   </span>
                 }
               />
               <BoundaryRow
                 label="Allowed"
-                value={<span className="font-mono tabular">{sov.externalAllowed}</span>}
+                value={
+                  <span className="font-mono tabular">
+                    {sov.externalAllowed}
+                  </span>
+                }
               />
               <BoundaryRow
                 label="Blocked"
@@ -122,14 +132,20 @@ export function SovereigntyPage() {
               <BoundaryRow
                 label="Local processing"
                 value={
-                  <span className="font-mono tabular">{sov.localProcessingPercent}%</span>
+                  <span className="font-mono tabular">
+                    {sov.localProcessingPercent}%
+                  </span>
                 }
               />
               <BoundaryRow
                 label="Audit recording"
                 value={
-                  <span className={sov.auditRecording ? 'text-success' : 'text-text-muted'}>
-                    {sov.auditRecording ? 'ON' : 'OFF'}
+                  <span
+                    className={
+                      sov.auditRecording ? "text-success" : "text-text-muted"
+                    }
+                  >
+                    {sov.auditRecording ? "ON" : "OFF"}
                   </span>
                 }
               />
@@ -144,9 +160,9 @@ export function SovereigntyPage() {
             </div>
 
             <p className="text-[11px] text-text-muted leading-relaxed border-l-2 border-accent/50 pl-2.5">
-              Honest posture: sovereignty reduces egress risk and keeps processing
-              local where configured. Operators must still review blocked events,
-              model health, and audit seals.
+              Honest posture: sovereignty reduces egress risk and keeps
+              processing local where configured. Operators must still review
+              blocked events, model health, and audit seals.
             </p>
           </div>
         </section>
@@ -172,13 +188,13 @@ export function SovereigntyPage() {
           ) : (
             <ul className="overflow-y-auto divide-y divide-border flex-1">
               {events.map((ev) => {
-                const blocked = ev.decision === 'blocked'
+                const blocked = ev.decision === "blocked";
                 return (
                   <li
                     key={ev.id}
                     className={cn(
-                      'px-3 py-2.5 flex gap-3 text-[12px] relative',
-                      blocked && 'bg-blocked-soft/25',
+                      "px-3 py-2.5 flex gap-3 text-[12px] relative",
+                      blocked && "bg-blocked-soft/25",
                     )}
                   >
                     {blocked ? (
@@ -193,13 +209,13 @@ export function SovereigntyPage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-micro text-text-secondary">
-                          {ev.kind.replace(/_/g, ' ')}
+                          {ev.kind.replace(/_/g, " ")}
                         </span>
                         {ev.decision ? (
                           <span
                             className={cn(
-                              'text-[10px] font-semibold uppercase tracking-wide',
-                              blocked ? 'text-blocked' : 'text-success',
+                              "text-[10px] font-semibold uppercase tracking-wide",
+                              blocked ? "text-blocked" : "text-success",
                             )}
                           >
                             {ev.decision}
@@ -221,7 +237,7 @@ export function SovereigntyPage() {
                       ) : null}
                     </div>
                   </li>
-                )
+                );
               })}
             </ul>
           )}
@@ -231,20 +247,14 @@ export function SovereigntyPage() {
         </section>
       </div>
     </div>
-  )
+  );
 }
 
-function BoundaryRow({
-  label,
-  value,
-}: {
-  label: string
-  value: ReactNode
-}) {
+function BoundaryRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex items-center justify-between gap-3 px-3 py-2">
       <span className="text-text-muted">{label}</span>
       <span className="text-text text-right">{value}</span>
     </div>
-  )
+  );
 }

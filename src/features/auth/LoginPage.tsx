@@ -1,35 +1,35 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { Button } from '@/components/ui/Button'
-import { useAuthStore, type UserRole } from '@/store'
-import { cn } from '@/lib/utils'
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+
+import { useAuthStore, type UserRole } from "@/store";
+import { cn } from "@/lib/utils";
 
 const ROLES: { id: UserRole; label: string; brief: string }[] = [
   {
-    id: 'operator',
-    label: 'Operator',
-    brief: 'Submit work packages, monitor runs, open evidence.',
+    id: "operator",
+    label: "Operator",
+    brief: "Submit work packages, monitor runs, open evidence.",
   },
   {
-    id: 'reviewer',
-    label: 'Reviewer',
-    brief: 'Inspect claims, decide HITL approvals, audit provenance.',
+    id: "reviewer",
+    label: "Reviewer",
+    brief: "Inspect claims, decide HITL approvals, audit provenance.",
   },
   {
-    id: 'admin',
-    label: 'Admin',
-    brief: 'Sovereignty policy, model registry, system settings.',
+    id: "admin",
+    label: "Admin",
+    brief: "Sovereignty policy, model registry, system settings.",
   },
-]
+];
 
 export function LoginPage() {
-  const navigate = useNavigate()
-  const signIn = useAuthStore((s) => s.signIn)
-  const [role, setRole] = useState<UserRole>('operator')
+  const navigate = useNavigate();
+  const signIn = useAuthStore((s) => s.signIn);
+  const [role, setRole] = useState<UserRole>("operator");
 
   function handleSignIn() {
-    signIn(role)
-    navigate('/')
+    signIn(role);
+    navigate("/");
   }
 
   return (
@@ -40,8 +40,8 @@ export function LoginPage() {
           className="pointer-events-none absolute inset-0 opacity-[0.35]"
           style={{
             backgroundImage:
-              'linear-gradient(rgba(36,48,65,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(36,48,65,0.5) 1px, transparent 1px)',
-            backgroundSize: '24px 24px',
+              "linear-gradient(rgba(36,48,65,0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(36,48,65,0.5) 1px, transparent 1px)",
+            backgroundSize: "24px 24px",
           }}
           aria-hidden
         />
@@ -51,7 +51,9 @@ export function LoginPage() {
               P
             </div>
             <div>
-              <div className="text-[15px] font-semibold tracking-[0.12em]">PRAMAAN</div>
+              <div className="text-[15px] font-semibold tracking-[0.12em]">
+                PRAMAAN
+              </div>
               <div className="text-[10px] text-text-muted tracking-wider uppercase mt-0.5">
                 SIH26117 · MRPL
               </div>
@@ -64,8 +66,9 @@ export function LoginPage() {
             Sovereign on-premise agentic execution
           </h1>
           <p className="text-[12.5px] text-text-secondary leading-relaxed">
-            Delegate confidential multimodal industrial work to local models — with
-            every tool call, evidence link, and network boundary observable.
+            Delegate confidential multimodal industrial work to local models —
+            with every tool call, evidence link, and network boundary
+            observable.
           </p>
           <dl className="border border-border bg-panel divide-y divide-border text-[11px]">
             <div className="flex justify-between px-3 py-2">
@@ -95,8 +98,12 @@ export function LoginPage() {
               P
             </div>
             <div>
-              <div className="text-sm font-semibold tracking-[0.08em]">PRAMAAN</div>
-              <div className="text-[10px] text-text-muted">Sovereign Workbench</div>
+              <div className="text-sm font-semibold tracking-[0.08em]">
+                PRAMAAN
+              </div>
+              <div className="text-[10px] text-text-muted">
+                Sovereign Workbench
+              </div>
             </div>
           </div>
 
@@ -104,8 +111,8 @@ export function LoginPage() {
             <div>
               <h2 className="text-[15px] font-semibold text-text">Sign in</h2>
               <p className="text-[11.5px] text-text-muted mt-1 leading-relaxed">
-                Role selection maps to a local operator profile for evaluation. No
-                credentials leave this host.
+                Role selection maps to a local operator profile for evaluation.
+                No credentials leave this host.
               </p>
             </div>
 
@@ -118,10 +125,8 @@ export function LoginPage() {
                     type="button"
                     onClick={() => setRole(r.id)}
                     className={cn(
-                      'w-full text-left px-3 py-2.5 transition-colors relative',
-                      role === r.id
-                        ? 'bg-raised'
-                        : 'hover:bg-raised/50',
+                      "w-full text-left px-3 py-2.5 transition-colors relative",
+                      role === r.id ? "bg-raised" : "hover:bg-raised/50",
                     )}
                   >
                     {role === r.id ? (
@@ -130,8 +135,12 @@ export function LoginPage() {
                         aria-hidden
                       />
                     ) : null}
-                    <div className="text-[13px] font-medium text-text">{r.label}</div>
-                    <div className="text-[11px] text-text-muted mt-0.5">{r.brief}</div>
+                    <div className="text-[13px] font-medium text-text">
+                      {r.label}
+                    </div>
+                    <div className="text-[11px] text-text-muted mt-0.5">
+                      {r.brief}
+                    </div>
                   </button>
                 ))}
               </div>
@@ -144,5 +153,5 @@ export function LoginPage() {
         </div>
       </main>
     </div>
-  )
+  );
 }

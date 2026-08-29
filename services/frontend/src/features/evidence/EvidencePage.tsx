@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
-import type { EvidenceRecord, EvidenceRegion } from '@/types/evidence'
+import { useEffect, useMemo, useState } from "react";
+import { useParams, useSearchParams } from "react-router-dom";
+import type { EvidenceRecord } from "@/types/evidence";
 import {
   EmptyState,
   ErrorState,
@@ -8,37 +8,35 @@ import {
   MetaRow,
   PageHeader,
   SectionLabel,
-} from '@/components/common/States'
-import { useEvidence, useEvidenceItem } from '@/hooks'
-import { cn, formatClock } from '@/lib/utils'
+} from "@/components/common/States";
+import { useEvidence, useEvidenceItem } from "@/hooks";
+import { cn, formatClock } from "@/lib/utils";
 
 export function EvidencePage() {
-  const { id: routeId } = useParams<{ id?: string }>()
-  const [searchParams] = useSearchParams()
-  const runId = searchParams.get('runId') ?? undefined
-  const taskId = searchParams.get('taskId') ?? undefined
+  const { id: routeId } = useParams<{ id?: string }>();
+  const [searchParams] = useSearchParams();
+  const runId = searchParams.get("runId") ?? undefined;
+  const taskId = searchParams.get("taskId") ?? undefined;
 
-  const listQuery = useEvidence(taskId, runId)
-  const [selectedId, setSelectedId] = useState<string | undefined>(routeId)
+  const listQuery = useEvidence(taskId, runId);
+  const [selectedId, setSelectedId] = useState<string | undefined>(routeId);
 
   useEffect(() => {
     if (routeId) {
-      setSelectedId(routeId)
-      return
+      setSelectedId(routeId);
+      return;
     }
     if (listQuery.data && listQuery.data.length > 0 && !selectedId) {
-      setSelectedId(listQuery.data[0].id)
+      setSelectedId(listQuery.data[0].id);
     }
-  }, [routeId, listQuery.data, selectedId])
+  }, [routeId, listQuery.data, selectedId]);
 
-  const itemQuery = useEvidenceItem(selectedId ?? '')
+  const itemQuery = useEvidenceItem(selectedId ?? "");
   const selected =
-    itemQuery.data ??
-    listQuery.data?.find((e) => e.id === selectedId) ??
-    null
+    itemQuery.data ?? listQuery.data?.find((e) => e.id === selectedId) ?? null;
 
   if (listQuery.isLoading) {
-    return <LoadingState label="Loading evidence ledger…" />
+    return <LoadingState label="Loading evidence ledger…" />;
   }
 
   if (listQuery.isError || !listQuery.data) {
@@ -47,10 +45,10 @@ export function EvidencePage() {
         title="Evidence unavailable"
         onRetry={() => void listQuery.refetch()}
       />
-    )
+    );
   }
 
-  const records = listQuery.data
+  const records = listQuery.data;
 
   return (
     <div className="space-y-3">
@@ -84,10 +82,8 @@ export function EvidencePage() {
                     type="button"
                     onClick={() => setSelectedId(ev.id)}
                     className={cn(
-                      'w-full text-left px-3 py-2.5 transition-colors relative',
-                      selectedId === ev.id
-                        ? 'bg-raised'
-                        : 'hover:bg-raised/40',
+                      "w-full text-left px-3 py-2.5 transition-colors relative",
+                      selectedId === ev.id ? "bg-raised" : "hover:bg-raised/40",
                     )}
                   >
                     {selectedId === ev.id ? (
@@ -125,30 +121,31 @@ export function EvidencePage() {
         </div>
       )}
     </div>
-  )
+  );
 }
 
 function ClaimDetail({ record }: { record: EvidenceRecord }) {
   const chain = useMemo(
     () => [
-      { label: 'CLAIM', value: record.claim },
-      { label: 'SOURCE', value: record.sourceDocument },
-      { label: 'PAGE', value: String(record.page) },
+      { label: "CLAIM", value: record.claim },
+      { label: "SOURCE", value: record.sourceDocument },
+      { label: "PAGE", value: String(record.page) },
       {
-        label: 'REGION',
+        label: "REGION",
         value: `x=${record.region.x.toFixed(2)} y=${record.region.y.toFixed(2)} w=${record.region.w.toFixed(2)} h=${record.region.h.toFixed(2)}`,
       },
       {
-        label: 'MODEL / TOOL',
-        value: [record.modelId, record.toolId].filter(Boolean).join(' · ') || '—',
+        label: "MODEL / TOOL",
+        value:
+          [record.modelId, record.toolId].filter(Boolean).join(" · ") || "—",
       },
       {
-        label: 'VALIDATION',
+        label: "VALIDATION",
         value: record.validationStatus,
       },
     ],
     [record],
-  )
+  );
 
   return (
     <div className="p-3 grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_260px] gap-3 flex-1 min-h-0">
@@ -158,17 +155,17 @@ function ClaimDetail({ record }: { record: EvidenceRecord }) {
             <li
               key={step.label}
               className={cn(
-                'px-3 py-2 flex gap-3',
-                i < chain.length - 1 && 'border-b border-border',
+                "px-3 py-2 flex gap-3",
+                i < chain.length - 1 && "border-b border-border",
               )}
             >
               <div className="shrink-0 w-5 flex flex-col items-center pt-0.5">
                 <span
                   className={cn(
-                    'size-2 border',
+                    "size-2 border",
                     i === chain.length - 1
-                      ? 'bg-accent border-accent'
-                      : 'bg-raised border-border-strong',
+                      ? "bg-accent border-accent"
+                      : "bg-raised border-border-strong",
                   )}
                 />
                 {i < chain.length - 1 ? (
@@ -176,12 +173,15 @@ function ClaimDetail({ record }: { record: EvidenceRecord }) {
                 ) : null}
               </div>
               <div className="min-w-0 flex-1">
-                <div className="text-micro text-accent mb-0.5">{step.label}</div>
+                <div className="text-micro text-accent mb-0.5">
+                  {step.label}
+                </div>
                 <div
                   className={cn(
-                    'text-[12.5px] text-text leading-relaxed',
-                    (step.label === 'REGION' || step.label === 'MODEL / TOOL') &&
-                      'font-mono text-[11px]',
+                    "text-[12.5px] text-text leading-relaxed",
+                    (step.label === "REGION" ||
+                      step.label === "MODEL / TOOL") &&
+                      "font-mono text-[11px]",
                   )}
                 >
                   {step.value}
@@ -204,7 +204,11 @@ function ClaimDetail({ record }: { record: EvidenceRecord }) {
             value={`${(record.confidence * 100).toFixed(1)}%`}
             mono
           />
-          <MetaRow label="Captured" value={formatClock(record.createdAt)} mono />
+          <MetaRow
+            label="Captured"
+            value={formatClock(record.createdAt)}
+            mono
+          />
           <MetaRow label="Run" value={record.runId} mono />
         </dl>
       </div>
@@ -214,47 +218,64 @@ function ClaimDetail({ record }: { record: EvidenceRecord }) {
         <SourceViewer record={record} />
       </div>
     </div>
-  )
+  );
 }
 
 function SourceViewer({ record }: { record: EvidenceRecord }) {
   return (
     <div className="border border-border bg-canvas p-3 space-y-3">
       <div>
-        <div className="font-medium text-text text-[12px] truncate">{record.sourceDocument}</div>
-        <div className="text-[10px] text-text-muted font-mono mt-1">Page {record.page} · local source</div>
+        <div className="font-medium text-text text-[12px] truncate">
+          {record.sourceDocument}
+        </div>
+        <div className="text-[10px] text-text-muted font-mono mt-1">
+          Page {record.page} · local source
+        </div>
       </div>
       <div className="border border-border bg-surface p-3">
         <div className="text-micro text-text-muted mb-1">Grounded content</div>
-        <p className="text-[11.5px] text-text-secondary leading-relaxed">{record.extractedText}</p>
+        <p className="text-[11.5px] text-text-secondary leading-relaxed">
+          {record.extractedText}
+        </p>
       </div>
       {record.sourceUrl ? (
-        <a href={record.sourceUrl} target="_blank" rel="noreferrer" className="inline-flex text-[11px] text-accent hover:underline">
+        <a
+          href={record.sourceUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex text-[11px] text-accent hover:underline"
+        >
           Open local source →
         </a>
       ) : (
-        <span className="text-[10px] text-text-muted">Source file link unavailable for this record.</span>
+        <span className="text-[10px] text-text-muted">
+          Source file link unavailable for this record.
+        </span>
       )}
     </div>
-  )
+  );
 }
 
-function ValidationChip({ status }: { status: EvidenceRecord['validationStatus'] }) {
+function ValidationChip({
+  status,
+}: {
+  status: EvidenceRecord["validationStatus"];
+}) {
   const tone =
-    status === 'validated'
-      ? 'text-success border-success/30 bg-success-soft'
-      : status === 'rejected'
-        ? 'text-danger border-danger/30 bg-danger-soft'
-        : 'text-warning border-warning/30 bg-warning-soft'
+    status === "validated"
+      ? "text-success border-success/30 bg-success-soft"
+      : status === "rejected"
+        ? "text-danger border-danger/30 bg-danger-soft"
+        : "text-warning border-warning/30 bg-warning-soft";
 
   return (
     <span
       className={cn(
-        'text-[10px] px-1.5 py-0.5 border font-medium capitalize',
+        "text-[10px] px-1.5 py-0.5 border font-medium capitalize",
         tone,
       )}
     >
       {status}
     </span>
-  )
+  );
 }

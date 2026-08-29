@@ -1,7 +1,7 @@
-from security.models import AgentRequest
-from security.policy import check_tool_access
-from security.rbac import Role
-from security.tools import Tool
+from services.governance.security.models import AgentRequest
+from services.governance.security.policy import check_tool_access
+from services.governance.security.rbac import Role
+from services.governance.security.tools import Tool
 
 
 def agent_request(request):

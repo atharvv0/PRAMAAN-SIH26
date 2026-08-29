@@ -157,11 +157,12 @@ Rules:
 5. Prefer real tools over abstract/unexecutable steps.
 6. For scanned/image/P&ID tasks with a local file, prefer tool `ocr.process`.
 7. For coding/Python/internal-tool tasks, use `code.generate_model` followed by `code.execute` when execution is required.
-8. If a final recommendation/approval-oriented output is being prepared, mark the final consequential step requires_approval=true.
-9. Do not invent facts, file contents, findings, SOP requirements, or tool results.
-10. Keep the plan to at most 8 steps.
-11. Return JSON with fields: goal, steps[]. Each step has step_no, capability, tool, inputs, depends_on, requires_approval.
-12. Use tool ids exactly as provided. Do not return markdown or chain-of-thought.
+8. If the user expects an answer, assessment, recommendation, or deliverable, finish with tool `model.reason` and make it depend on the relevant upstream analysis/evidence steps.
+9. If a final recommendation/approval-oriented output is being prepared, mark the final consequential step requires_approval=true.
+10. Do not invent facts, file contents, findings, SOP requirements, or tool results.
+11. Keep the plan to at most 8 steps.
+12. Return JSON with fields: goal, steps[]. Each step has step_no, capability, tool, inputs, depends_on, requires_approval.
+13. Use tool ids exactly as provided. Do not return markdown or chain-of-thought.
 
 User task:
 {intent}
@@ -229,35 +230,156 @@ def create_plan(
     intent: str,
     file_path: str | None = None,
 ) -> Plan:
-    """Create the deterministic compatibility plan used by existing tests."""
+    """Deterministic compatibility/production plan.
+
+    Production callers that do not yet enable the model-backed planner still get
+    executable tool steps. In particular, file-backed tasks finish with a real
+    model.reason step so the run produces a user-facing answer rather than only a
+    tool trace.
+    """
     intent_lower = intent.lower()
 
-    if any(k in intent_lower for k in ("network", "outbound", "external call", "sovereignty proof", "sovereign proof")):
+    if any(
+        k in intent_lower
+        for k in (
+            "network",
+            "outbound",
+            "external call",
+            "sovereignty proof",
+            "sovereign proof",
+        )
+    ):
         return Plan(
             task_id=task_id,
             goal=intent,
-            steps=[PlanStep(capability="network_egress_test", tool="network.fetch_demo", inputs={})],
+            steps=[
+                PlanStep(
+                    capability="network_egress_test",
+                    tool="network.fetch_demo",
+                    inputs={},
+                )
+            ],
         )
 
-    if any(k in intent_lower for k in ("sop", "search the knowledge", "what does the sop", "search sop", "look up")):
+    if any(
+        k in intent_lower
+        for k in (
+            "sop",
+            "search the knowledge",
+            "what does the sop",
+            "search sop",
+            "look up",
+        )
+    ):
+        search_step = PlanStep(
+            capability="knowledge_search",
+            tool="knowledge.search",
+            inputs={"query": intent},
+        )
+        reason_step = PlanStep(
+            capability="reasoning",
+            tool="model.reason",
+            inputs={"intent": intent},
+            depends_on=[search_step.id],
+        )
         return Plan(
             task_id=task_id,
             goal=intent,
-            steps=[PlanStep(capability="knowledge_search", tool="knowledge.search", inputs={"query": intent})],
+            steps=[search_step, reason_step],
         )
 
-    if file_path and any(k in intent_lower for k in ("scan", "scanned", "p&id", "pid drawing", "drawing", "ocr", "vision", "image", "photo", "handwrit", "inspection package")):
-        ocr_step = PlanStep(capability="document_analysis", tool="ocr.process_naive", inputs={"path": file_path})
-        summarize_step = PlanStep(capability="summarize_text", tool="text.summarize_naive", inputs={}, depends_on=[ocr_step.id])
-        return Plan(task_id=task_id, goal=intent, steps=[ocr_step, summarize_step])
+    is_visual_document = file_path and any(
+        k in intent_lower
+        for k in (
+            "scan",
+            "scanned",
+            "p&id",
+            "pid drawing",
+            "drawing",
+            "ocr",
+            "vision",
+            "image",
+            "photo",
+            "handwrit",
+            "inspection package",
+            "inspection report",
+            "pressure vessel",
+        )
+    )
 
-    if file_path and "summar" in intent_lower:
-        read_step = PlanStep(capability="document_analysis", tool="file.read", inputs={"path": file_path})
-        summarize_step = PlanStep(capability="summarize_text", tool="text.summarize_naive", inputs={}, depends_on=[read_step.id])
-        return Plan(task_id=task_id, goal=intent, steps=[read_step, summarize_step])
+    if is_visual_document:
+        analysis_step = PlanStep(
+            capability="document_analysis",
+            tool="ocr.process",
+            inputs={"path": file_path},
+        )
+        summarize_step = PlanStep(
+            capability="summarize_text",
+            tool="text.summarize_model",
+            inputs={},
+            depends_on=[analysis_step.id],
+        )
+        respond_step = PlanStep(
+            capability="reasoning",
+            tool="model.reason",
+            inputs={"intent": intent},
+            depends_on=[analysis_step.id, summarize_step.id],
+        )
+        return Plan(
+            task_id=task_id,
+            goal=intent,
+            steps=[analysis_step, summarize_step, respond_step],
+        )
 
-    understand_step = PlanStep(capability="understand_intent", inputs={"intent": intent})
-    respond_step = PlanStep(capability="respond", inputs={}, depends_on=[understand_step.id])
+    if file_path:
+        read_step = PlanStep(
+            capability="document_analysis",
+            tool="file.read",
+            inputs={"path": file_path},
+        )
+
+        if "summar" in intent_lower:
+            summarize_step = PlanStep(
+                capability="summarize_text",
+                tool="text.summarize_model",
+                inputs={},
+                depends_on=[read_step.id],
+            )
+            respond_step = PlanStep(
+                capability="reasoning",
+                tool="model.reason",
+                inputs={"intent": intent},
+                depends_on=[read_step.id, summarize_step.id],
+            )
+            return Plan(
+                task_id=task_id,
+                goal=intent,
+                steps=[read_step, summarize_step, respond_step],
+            )
+
+        respond_step = PlanStep(
+            capability="reasoning",
+            tool="model.reason",
+            inputs={"intent": intent},
+            depends_on=[read_step.id],
+        )
+        return Plan(
+            task_id=task_id,
+            goal=intent,
+            steps=[read_step, respond_step],
+        )
+
+    # Generic tasks still get a real answer-capable step.
+    respond_step = PlanStep(
+        capability="reasoning",
+        tool="model.reason",
+        inputs={"intent": intent},
+    )
     if "approval" in intent_lower or "approve" in intent_lower:
         respond_step.requires_approval = True
-    return Plan(task_id=task_id, goal=intent, steps=[understand_step, respond_step])
+
+    return Plan(
+        task_id=task_id,
+        goal=intent,
+        steps=[respond_step],
+    )

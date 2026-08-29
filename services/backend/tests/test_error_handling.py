@@ -1,6 +1,6 @@
 from fastapi.testclient import TestClient
 
-from ..main import app
+from ..app.main import app
 
 client = TestClient(app, raise_server_exceptions=False)
 
@@ -18,7 +18,13 @@ def test_agent_loop_limit_error_maps_to_documented_error_shape(monkeypatch):
     def _boom(*args, **kwargs):
         raise AgentLoopLimitError("executor exceeded max_steps=20 for task X")
 
-    import app.api.runs as runs_module
+    # Must patch the same module object the running app uses. `import
+    # app.api.runs` (bare top-level `app`) creates a *second*, disconnected
+    # copy of this module rather than patching the one services.backend.app
+    # actually calls -- the ..app.main import above (and the rest of this
+    # codebase) uses the fully-qualified services.backend.app.* path, so the
+    # patch target must match.
+    import services.backend.app.api.runs as runs_module
 
     monkeypatch.setattr(runs_module, "run_plan", _boom)
 

@@ -50,8 +50,15 @@ class VectorStore:
         return ids
 
     def search(self, query: str, top_k: int = 3) -> list[dict]:
-        self._ensure_collection(len(embed_text(query)))
-        response = self._client.query_points(collection_name=self._collection, query=embed_text(query), limit=top_k)
+        # Embed the query once and reuse it for both collection sizing and
+        # the actual search -- this used to call embed_text(query) twice per
+        # search (doubling embedding latency/cost, and doubling network
+        # calls when using the real Ollama embedding provider), even though
+        # _ensure_collection's size argument is only ever used the first
+        # time a collection is created.
+        query_vector = embed_text(query)
+        self._ensure_collection(len(query_vector))
+        response = self._client.query_points(collection_name=self._collection, query=query_vector, limit=top_k)
         return [{"text":p.payload["text"],"source":p.payload["source"],"chunk_index":p.payload.get("chunk_index",0),"score":p.score,"point_id":str(p.id)} for p in response.points]
 
 

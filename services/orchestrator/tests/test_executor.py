@@ -7,6 +7,7 @@ from services.orchestrator.state_graph.agent_state import AgentState
 from services.orchestrator.state_graph.executor import run_plan
 from services.orchestrator.tools.base import ToolAdapter, ToolRegistry
 from services.orchestrator.tools.examples import ReadFileTool, SummarizeTextTool
+from services.orchestrator.tools.model_backed import ReasoningModelTool, SummarizeTextModelTool
 
 SAMPLE_FILE = "data/samples/demo/sample_note.txt"
 
@@ -20,30 +21,35 @@ def _registry_with_demo_tools() -> ToolRegistry:
 
 def test_full_read_and_summarize_loop():
     """The signature demo from master prompt section 30: one instruction ->
-    multi-step plan -> tool use -> completed result."""
+    multi-step plan -> tool use -> completed result.
+
+    Uses the real production tool ids (file.read + text.summarize_model +
+    model.reason) -- create_plan() emits these, not the text.summarize_naive
+    demo id this test originally used -- routed through the offline
+    demo-fallback model adapter so the test runs without a live Ollama
+    server (see services/model_control/adapters/demo_adapter.py)."""
+    registry = ToolRegistry()
+    registry.register(ReadFileTool())
+    registry.register(SummarizeTextModelTool())
+    registry.register(ReasoningModelTool())
+
     plan = create_plan(task_id="task_1", intent="summarize this file", file_path=SAMPLE_FILE)
     state = AgentState(task_id="task_1", user_id="user_1", intent="summarize this file")
     state.plan = plan
 
-    result_state = run_plan(state, _registry_with_demo_tools())
+    result_state = run_plan(state, registry)
 
     assert result_state.errors == []
-    assert len(result_state.completed_steps) == 2
+    assert len(result_state.completed_steps) == 3
     assert result_state.final_output is not None
     assert "summary" in result_state.final_output["tool_outputs"][1]
     assert result_state.final_output["tool_outputs"][1]["summary"]  # non-empty
+    assert result_state.final_output["response"]  # final model.reason answer surfaced
 
 
-def test_fallback_plan_with_no_tools_completes():
+def test_generic_plan_requires_a_real_answer_tool():
     plan = create_plan(task_id="task_2", intent="do something vague")
-    state = AgentState(task_id="task_2", user_id="user_1", intent="do something vague")
-    state.plan = plan
-
-    result_state = run_plan(state, ToolRegistry())
-
-    assert result_state.errors == []
-    assert len(result_state.completed_steps) == 2
-    assert result_state.final_output is not None
+    assert plan.steps[0].tool == "model.reason"
 
 
 def test_missing_tool_raises_tool_execution_error_and_is_recorded():
@@ -72,17 +78,35 @@ def test_step_requiring_approval_pauses_execution():
 
 def test_multimodal_plan_produces_ocr_then_summarize_steps():
     plan = create_plan(task_id="task_6", intent="review this scanned inspection report", file_path=SAMPLE_FILE)
-    assert len(plan.steps) == 2
-    assert plan.steps[0].tool == "ocr.process_naive"
-    assert plan.steps[1].tool == "text.summarize_naive"
+    # ocr.process -> text.summarize_model -> model.reason: the planner always
+    # finishes a visual-document analysis with a real answer step (see
+    # create_plan()'s is_visual_document branch), so this is a 3-step plan.
+    assert len(plan.steps) == 3
+    assert plan.steps[0].tool == "ocr.process"
+    assert plan.steps[1].tool == "text.summarize_model"
+    assert plan.steps[2].tool == "model.reason"
     assert plan.steps[1].depends_on == [plan.steps[0].id]
+    assert set(plan.steps[2].depends_on) == {plan.steps[0].id, plan.steps[1].id}
 
 
 def test_multimodal_loop_populates_evidence():
     from services.orchestrator.tools.examples import OcrProcessNaiveTool
+    from services.orchestrator.tools.base import ToolAdapter
+
+    class _ProductionOcrAlias(OcrProcessNaiveTool):
+        id = "ocr.process"
 
     registry = _registry_with_demo_tools()
-    registry.register(OcrProcessNaiveTool())
+    registry.register(_ProductionOcrAlias())
+    registry.register(SummarizeTextModelTool())
+
+    class _ReasoningAlias(ToolAdapter):
+        id = "model.reason"
+
+        def invoke(self, inputs: dict) -> dict:
+            return {"content": "Review completed from source material."}
+
+    registry.register(_ReasoningAlias())
 
     plan = create_plan(task_id="task_7", intent="review this scanned p&id drawing", file_path=SAMPLE_FILE)
     state = AgentState(task_id="task_7", user_id="user_1", intent="review this scanned p&id drawing")
@@ -95,7 +119,7 @@ def test_multimodal_loop_populates_evidence():
     assert len(result_state.evidence) == 1
     ev = result_state.evidence[0]
     assert ev.source == SAMPLE_FILE
-    assert ev.tool == "ocr.process_naive"
+    assert ev.tool == "ocr.process"
     assert ev.page_or_region == "page_1"
     assert ev.validation_state == "unverified"
 
@@ -141,29 +165,41 @@ def test_network_denial_is_recorded_in_audit_log():
 
 
 def test_approval_demo_plan_pauses_and_resumes_via_approval_status():
+    # A fileless "approval note" intent produces a single, approval-gated
+    # model.reason step (see create_plan()'s generic branch) -- not a
+    # two-step plan -- so the gated step is plan.steps[0].
+    registry = ToolRegistry()
+    registry.register(ReasoningModelTool())
+
     plan = create_plan(task_id="task_10", intent="prepare an approval note")
-    assert plan.steps[1].requires_approval is True
+    assert plan.steps[0].requires_approval is True
 
     state = AgentState(task_id="task_10", user_id="user_1", intent="prepare an approval note")
     state.plan = plan
 
-    paused = run_plan(state, ToolRegistry())
+    paused = run_plan(state, registry)
     assert paused.approval_status == "pending"
-    assert len(paused.completed_steps) == 1  # first step ran, second is gated
+    assert len(paused.completed_steps) == 0  # final answer step is gated
 
     paused.approval_status = "approved"
-    resumed = run_plan(paused, ToolRegistry())
+    resumed = run_plan(paused, registry)
     assert resumed.approval_status == "approved"
-    assert len(resumed.completed_steps) == 2
+    assert len(resumed.completed_steps) == 1
     assert resumed.final_output is not None
 
 
 def test_event_log_records_expected_lifecycle_events():
+    # The plan's single step is tool="model.reason" -- it must actually be
+    # registered for the step (and therefore the task) to reach
+    # TASK_COMPLETED instead of failing on an unregistered-tool KeyError.
+    registry = ToolRegistry()
+    registry.register(ReasoningModelTool())
+
     plan = create_plan(task_id="task_11", intent="do something vague")
     state = AgentState(task_id="task_11", user_id="user_1", intent="do something vague")
     state.plan = plan
 
-    result_state = run_plan(state, ToolRegistry())
+    result_state = run_plan(state, registry)
 
     event_types = [e["type"] for e in result_state.events]
     assert event_types[0] == "TASK_CREATED"

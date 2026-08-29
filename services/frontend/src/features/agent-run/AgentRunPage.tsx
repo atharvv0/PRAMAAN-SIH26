@@ -9,7 +9,7 @@ import {
   MetaRow,
   SectionLabel,
 } from '@/components/common/States'
-import { useAgentRun, useEvidence, useTask } from '@/hooks'
+import { useAgentRun, useEvidence, useTask, useTaskEvents } from '@/hooks'
 import { formatClock, formatDuration } from '@/lib/utils'
 import { TaskTimeline } from './TaskTimeline'
 import { ModelRoutingPanel } from './ModelRoutingPanel'
@@ -18,12 +18,12 @@ import { ToolTracePanel } from './ToolTracePanel'
 export function AgentRunPage() {
   const { runId } = useParams<{ runId: string }>()
   const runQuery = useAgentRun(runId)
-  const taskQuery = useTask(runQuery.data?.taskId ?? '')
-  const evidenceQuery = useEvidence(runQuery.data?.taskId, runId)
+  const run = runQuery.data
+  const taskQuery = useTask(run?.taskId ?? '')
+  const evidenceQuery = useEvidence(run?.taskId, runId)
+  const eventQuery = useTaskEvents(run?.taskId ?? '')
 
   const [selectedStep, setSelectedStep] = useState<AgentStep | null>(null)
-
-  const run = runQuery.data
   const task = taskQuery.data
 
   useEffect(() => {
@@ -203,6 +203,11 @@ export function AgentRunPage() {
           </section>
         </div>
       </div>
+
+      <section className="border border-border bg-panel">
+        <SectionLabel right={<span className="font-mono text-[10px]">{eventQuery.data?.length ?? run.events?.length ?? 0}</span>}>Execution events</SectionLabel>
+        {eventQuery.isError ? <ErrorState className="m-3" title="Execution events unavailable" onRetry={() => void eventQuery.refetch()} /> : (eventQuery.data?.length ?? run.events?.length ?? 0) === 0 ? <p className="px-4 py-4 text-[11px] text-text-muted">No execution events have been returned for this run.</p> : <ul className="divide-y divide-border">{(eventQuery.data ?? run.events ?? []).slice(0, 12).map((event, index) => <li key={String(event.id ?? `${run.id}-${index}`)} className="grid gap-2 px-4 py-2.5 text-[11px] sm:grid-cols-[90px_minmax(0,1fr)]"><span className="font-mono text-[10px] text-text-muted">{typeof event.timestamp === 'string' ? formatClock(event.timestamp) : '—'}</span><span className="text-text-secondary">{typeof event.message === 'string' ? event.message : typeof event.action === 'string' ? event.action : JSON.stringify(event)}</span></li>)}</ul>}
+      </section>
     </div>
   )
 }

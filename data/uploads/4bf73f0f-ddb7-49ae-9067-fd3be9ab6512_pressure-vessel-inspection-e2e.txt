@@ -1,0 +1,41 @@
+PRAMAAN E2E INSPECTION RECORD
+
+Document ID: PVI-E2E-001
+Classification: CONFIDENTIAL
+Inspection Date: 29 August 2026
+Asset: Pressure Vessel PV-204
+Location: Process Unit B
+
+INSPECTION SUMMARY
+
+The external shell inspection was completed.
+
+External shell condition:
+ACCEPTABLE
+
+Weld visual inspection:
+ACCEPTABLE
+
+Safety valve inspection:
+ACCEPTABLE
+
+Observed condition:
+No visible external deformation or leakage was recorded during the inspection.
+
+Follow-up:
+No immediate corrective maintenance was identified from the visual inspection.
+
+Recommended inspection interval:
+12 months, subject to applicable engineering and site requirements.
+
+IMPORTANT LIMITATION
+
+This record describes visual inspection observations only.
+It does not establish internal material integrity, remaining wall thickness,
+or fitness-for-service beyond the observations explicitly recorded above.
+
+REQUIRED REVIEW
+
+A competent human reviewer should confirm that the recommended inspection
+interval and disposition are appropriate for the applicable engineering
+requirements before final approval.

@@ -1,19 +1,19 @@
-import type { ReactNode } from 'react'
-import { AlertTriangle, Ban, FileQuestion, Loader2 } from 'lucide-react'
-import { Button } from '@/components/ui/Button'
-import { cn } from '@/lib/utils'
+import type { ReactNode } from "react";
+import { AlertTriangle, Ban, FileQuestion, Loader2 } from "lucide-react";
+
+import { cn } from "@/lib/utils";
 
 export function LoadingState({
-  label = 'Loading…',
+  label = "Loading…",
   className,
 }: {
-  label?: string
-  className?: string
+  label?: string;
+  className?: string;
 }) {
   return (
     <div
       className={cn(
-        'flex items-center gap-2 px-3 py-10 text-[12.5px] text-text-secondary',
+        "flex items-center gap-2 px-3 py-10 text-[12.5px] text-text-secondary",
         className,
       )}
       role="status"
@@ -21,7 +21,7 @@ export function LoadingState({
       <Loader2 className="size-3.5 animate-spin text-running" aria-hidden />
       {label}
     </div>
-  )
+  );
 }
 
 export function EmptyState({
@@ -30,15 +30,15 @@ export function EmptyState({
   action,
   className,
 }: {
-  title: string
-  description?: string
-  action?: ReactNode
-  className?: string
+  title: string;
+  description?: string;
+  action?: ReactNode;
+  className?: string;
 }) {
   return (
     <div
       className={cn(
-        'flex flex-col items-start gap-1.5 border border-dashed border-border px-4 py-8 bg-surface/40',
+        "flex flex-col items-start gap-1.5 border border-dashed border-border px-4 py-8 bg-surface/40",
         className,
       )}
     >
@@ -53,24 +53,24 @@ export function EmptyState({
       ) : null}
       {action}
     </div>
-  )
+  );
 }
 
 export function ErrorState({
-  title = 'Unable to load data',
+  title = "Unable to load data",
   description,
   onRetry,
   className,
 }: {
-  title?: string
-  description?: string
-  onRetry?: () => void
-  className?: string
+  title?: string;
+  description?: string;
+  onRetry?: () => void;
+  className?: string;
 }) {
   return (
     <div
       className={cn(
-        'flex flex-col items-start gap-2 border border-danger/35 bg-danger-soft px-4 py-5',
+        "flex flex-col items-start gap-2 border border-danger/35 bg-danger-soft px-4 py-5",
         className,
       )}
       role="alert"
@@ -90,22 +90,22 @@ export function ErrorState({
         </Button>
       ) : null}
     </div>
-  )
+  );
 }
 
 export function BlockedState({
-  title = 'Action blocked by Sovereignty Policy',
+  title = "Action blocked by Sovereignty Policy",
   description,
   className,
 }: {
-  title?: string
-  description?: string
-  className?: string
+  title?: string;
+  description?: string;
+  className?: string;
 }) {
   return (
     <div
       className={cn(
-        'flex flex-col items-start gap-2 border border-blocked/35 bg-blocked-soft px-4 py-5',
+        "flex flex-col items-start gap-2 border border-blocked/35 bg-blocked-soft px-4 py-5",
         className,
       )}
       role="status"
@@ -120,7 +120,7 @@ export function BlockedState({
         </p>
       ) : null}
     </div>
-  )
+  );
 }
 
 export function PageHeader({
@@ -129,10 +129,10 @@ export function PageHeader({
   description,
   actions,
 }: {
-  eyebrow?: string
-  title: string
-  description?: string
-  actions?: ReactNode
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  actions?: ReactNode;
 }) {
   return (
     <header className="flex flex-wrap items-end justify-between gap-3 pb-3 mb-1 border-b border-border">
@@ -149,24 +149,28 @@ export function PageHeader({
           </p>
         ) : null}
       </div>
-      {actions ? <div className="flex items-center gap-2">{actions}</div> : null}
+      {actions ? (
+        <div className="flex items-center gap-2">{actions}</div>
+      ) : null}
     </header>
-  )
+  );
 }
 
 export function SectionLabel({
   children,
   right,
 }: {
-  children: ReactNode
-  right?: ReactNode
+  children: ReactNode;
+  right?: ReactNode;
 }) {
   return (
     <div className="panel-header justify-between">
       <span>{children}</span>
-      {right ? <span className="normal-case tracking-normal font-normal">{right}</span> : null}
+      {right ? (
+        <span className="normal-case tracking-normal font-normal">{right}</span>
+      ) : null}
     </div>
-  )
+  );
 }
 
 export function MetaRow({
@@ -174,16 +178,18 @@ export function MetaRow({
   value,
   mono,
 }: {
-  label: string
-  value: ReactNode
-  mono?: boolean
+  label: string;
+  value: ReactNode;
+  mono?: boolean;
 }) {
   return (
     <div className="grid grid-cols-[108px_1fr] gap-2 text-[12px] py-1.5 border-b border-border/60 last:border-0">
       <dt className="text-text-muted">{label}</dt>
-      <dd className={cn('text-text break-words', mono && 'font-mono text-[11px]')}>
+      <dd
+        className={cn("text-text break-words", mono && "font-mono text-[11px]")}
+      >
         {value}
       </dd>
     </div>
-  )
+  );
 }

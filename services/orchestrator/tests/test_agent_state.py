@@ -5,11 +5,19 @@ from services.orchestrator.tools.base import ToolAdapter, ToolRegistry
 
 
 def test_create_plan_produces_ordered_steps():
-    plan = create_plan(task_id="task_1", intent="summarize this file")
+    # A "summarize this file" intent only produces a read+summarize(+answer)
+    # pipeline when a file is actually supplied -- with no file_path the
+    # deterministic planner correctly falls back to a single reasoning step
+    # (there is nothing to read). Supply a file to exercise step ordering.
+    plan = create_plan(task_id="task_1", intent="summarize this file", file_path="report.txt")
     assert plan.task_id == "task_1"
-    assert len(plan.steps) == 2
+    # read -> summarize -> model.reason (current planner always finishes a
+    # file-backed summarize request with a real answer step; see
+    # services/orchestrator/planner/planner.py create_plan()).
+    assert len(plan.steps) == 3
     assert plan.steps[0].status == StepStatus.PENDING
     assert plan.steps[1].depends_on == [plan.steps[0].id]
+    assert plan.steps[2].tool == "model.reason"
 
 
 def test_agent_state_defaults():

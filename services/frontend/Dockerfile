@@ -8,9 +8,7 @@ COPY tsconfig.json tsconfig.app.json tsconfig.node.json vite.config.ts index.htm
 COPY src ./src
 COPY public ./public
 
-ARG VITE_API_MODE=http
 ARG VITE_API_BASE_URL=/api/v1
-ENV VITE_API_MODE=${VITE_API_MODE}
 ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 
 RUN npm run build

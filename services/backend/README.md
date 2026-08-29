@@ -41,9 +41,20 @@ root** on `PYTHONPATH`, not just its own directory:
 # from repo root
 python -m venv .venv && source .venv/bin/activate
 pip install -r services/backend/requirements.txt -r services/orchestrator/requirements.txt
-PYTHONPATH=. uvicorn app.main:app --app-dir services/backend --reload --port 8000
+PYTHONPATH=. uvicorn services.backend.app.main:app --reload --port 8000
 # or: docker compose up backend   (Dockerfile already builds with repo root as context)
 ```
+
+Note: every module in this codebase imports via the fully-qualified
+`services.X.Y` path (e.g. `from services.backend.app.api import ...` in
+`app/main.py` itself). Running uvicorn as `app.main:app --app-dir
+services/backend` (an earlier version of this doc) loads the app under a
+*different* top-level module name (`app.main` instead of
+`services.backend.app.main`) than the rest of the codebase expects, which
+works by accident as long as nothing else in the same process imports the
+`services.backend.app.*` path -- but it means two different Python module
+objects can end up representing "the same" module if anything does. Always
+invoke it via the fully-qualified path above.
 
 ## Test it
 

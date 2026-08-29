@@ -1,18 +1,7 @@
 import type { StatusKind } from './status'
 
-export type DeliverableType =
-  | 'docx'
-  | 'pptx'
-  | 'xlsx'
-  | 'code'
-  | 'report'
-  | 'calculation'
-
-export type ApprovalStatus =
-  | 'pending'
-  | 'approved'
-  | 'changes_requested'
-  | 'rejected'
+export type DeliverableType = 'docx' | 'pptx' | 'xlsx' | 'code' | 'report' | 'calculation'
+export type ApprovalStatus = 'pending' | 'approved' | 'changes_requested' | 'rejected'
 
 export interface Deliverable {
   id: string
@@ -25,5 +14,6 @@ export interface Deliverable {
   approvalStatus: ApprovalStatus
   evidenceCount: number
   provenanceSummary: string
+  fileId?: string
   downloadUrl?: string
 }

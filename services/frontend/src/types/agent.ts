@@ -50,4 +50,8 @@ export interface AgentState {
   toolInvocations: ToolInvocation[]
   startedAt: string
   updatedAt: string
+  errors?: Array<Record<string, unknown>>
+  evidence?: Array<Record<string, unknown>>
+  finalOutput?: string | null
+  events?: Array<Record<string, unknown>>
 }

@@ -1,21 +1,21 @@
-import { Link } from 'react-router-dom'
-import { Plus } from 'lucide-react'
-import { StatusBadge } from '@/components/ui/StatusBadge'
-import { Button } from '@/components/ui/Button'
-import { DataTable, Td } from '@/components/common/DataTable'
+import { Link } from "react-router-dom";
+import { Plus } from "lucide-react";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+
+import { DataTable, Td } from "@/components/common/DataTable";
 import {
   EmptyState,
   ErrorState,
   LoadingState,
   PageHeader,
-} from '@/components/common/States'
-import { useTasks } from '@/hooks'
-import { useWorkbenchStore } from '@/store'
-import { formatClock, formatDuration } from '@/lib/utils'
+} from "@/components/common/States";
+import { useTasks } from "@/hooks";
+import { useWorkbenchStore } from "@/store";
+import { formatClock, formatDuration } from "@/lib/utils";
 
 export function TasksPage() {
-  const workspaceId = useWorkbenchStore((s) => s.workspaceId)
-  const { data, isLoading, isError, refetch } = useTasks(workspaceId)
+  const workspaceId = useWorkbenchStore((s) => s.workspaceId);
+  const { data, isLoading, isError, refetch } = useTasks(workspaceId);
 
   return (
     <div className="space-y-3">
@@ -25,7 +25,11 @@ export function TasksPage() {
         description="Work packages scoped to the active workspace."
         actions={
           <Link to="/tasks/new">
-            <Button variant="primary" size="sm" leftIcon={<Plus className="size-3.5" />}>
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Plus className="size-3.5" />}
+            >
               New task
             </Button>
           </Link>
@@ -34,10 +38,7 @@ export function TasksPage() {
 
       {isLoading ? <LoadingState label="Loading tasks…" /> : null}
       {isError ? (
-        <ErrorState
-          title="Tasks unavailable"
-          onRetry={() => void refetch()}
-        />
+        <ErrorState title="Tasks unavailable" onRetry={() => void refetch()} />
       ) : null}
 
       {!isLoading && !isError && data && data.length === 0 ? (
@@ -57,14 +58,14 @@ export function TasksPage() {
       {!isLoading && !isError && data && data.length > 0 ? (
         <DataTable
           columns={[
-            'Title',
-            'Status',
-            'Progress',
-            'Current step',
-            'Model',
-            'Elapsed',
-            'Updated',
-            'Run',
+            "Title",
+            "Status",
+            "Progress",
+            "Current step",
+            "Model",
+            "Elapsed",
+            "Updated",
+            "Run",
           ]}
         >
           {data.map((task) => (
@@ -81,10 +82,10 @@ export function TasksPage() {
               <Td mono>{task.progress}%</Td>
               <Td>
                 <span className="text-[11px] uppercase tracking-wide text-text-muted">
-                  {task.currentStep ?? '—'}
+                  {task.currentStep ?? "—"}
                 </span>
               </Td>
-              <Td>{task.model ?? '—'}</Td>
+              <Td>{task.model ?? "—"}</Td>
               <Td mono>{formatDuration(task.elapsedMs)}</Td>
               <Td mono>{formatClock(task.updatedAt)}</Td>
               <Td>
@@ -104,5 +105,5 @@ export function TasksPage() {
         </DataTable>
       ) : null}
     </div>
-  )
+  );
 }

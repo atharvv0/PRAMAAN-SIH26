@@ -1,46 +1,46 @@
-import { useMemo, useState } from 'react'
-import { ChevronDown, ChevronRight } from 'lucide-react'
-import { StatusBadge } from '@/components/ui/StatusBadge'
-import { Field, Input, Select } from '@/components/ui/Field'
+import { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { Field, Input } from "@/components/ui/Field";
 import {
   EmptyState,
   ErrorState,
   LoadingState,
   PageHeader,
   SectionLabel,
-} from '@/components/common/States'
-import { useAuditEvents } from '@/hooks'
-import { cn, formatClock, formatDateTime } from '@/lib/utils'
+} from "@/components/common/States";
+import { useAuditEvents } from "@/hooks";
+import { cn, formatClock, formatDateTime } from "@/lib/utils";
 
 export function AuditPage() {
-  const { data, isLoading, isError, refetch } = useAuditEvents()
-  const [query, setQuery] = useState('')
-  const [eventType, setEventType] = useState('all')
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({})
+  const { data, isLoading, isError, refetch } = useAuditEvents();
+  const [query, setQuery] = useState("");
+  const [eventType, setEventType] = useState("all");
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   const types = useMemo(() => {
-    const set = new Set<string>()
-    data?.forEach((e) => set.add(e.eventType))
-    return Array.from(set).sort()
-  }, [data])
+    const set = new Set<string>();
+    data?.forEach((e) => set.add(e.eventType));
+    return Array.from(set).sort();
+  }, [data]);
 
   const filtered = useMemo(() => {
-    if (!data) return []
-    const q = query.trim().toLowerCase()
+    if (!data) return [];
+    const q = query.trim().toLowerCase();
     return data
-      .filter((e) => (eventType === 'all' ? true : e.eventType === eventType))
+      .filter((e) => (eventType === "all" ? true : e.eventType === eventType))
       .filter((e) => {
-        if (!q) return true
+        if (!q) return true;
         return (
           e.action.toLowerCase().includes(q) ||
           e.result.toLowerCase().includes(q) ||
           e.actor.toLowerCase().includes(q) ||
           (e.details?.toLowerCase().includes(q) ?? false)
-        )
+        );
       })
       .slice()
-      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-  }, [data, query, eventType])
+      .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  }, [data, query, eventType]);
 
   return (
     <div className="space-y-3">
@@ -59,7 +59,10 @@ export function AuditPage() {
           />
         </Field>
         <Field label="Event type">
-          <Select value={eventType} onChange={(e) => setEventType(e.target.value)}>
+          <Select
+            value={eventType}
+            onChange={(e) => setEventType(e.target.value)}
+          >
             <option value="all">All types</option>
             {types.map((t) => (
               <option key={t} value={t}>
@@ -85,11 +88,11 @@ export function AuditPage() {
             Events · {filtered.length}
             {data && filtered.length !== data.length
               ? ` of ${data.length}`
-              : ''}
+              : ""}
           </SectionLabel>
           <ul className="divide-y divide-border">
             {filtered.map((ev) => {
-              const open = expanded[ev.id] ?? false
+              const open = expanded[ev.id] ?? false;
               return (
                 <li key={ev.id}>
                   <button
@@ -122,21 +125,21 @@ export function AuditPage() {
                       </p>
                       <div className="text-[10px] text-text-muted mt-0.5 font-mono">
                         {ev.actor}
-                        {ev.taskId ? ` · ${ev.taskId}` : ''}
+                        {ev.taskId ? ` · ${ev.taskId}` : ""}
                       </div>
                     </div>
                   </button>
                   {open ? (
                     <div
                       className={cn(
-                        'px-3 pb-3 pl-10 text-[11px] text-text-secondary space-y-1',
+                        "px-3 pb-3 pl-10 text-[11px] text-text-secondary space-y-1",
                       )}
                     >
                       <div>Time: {formatDateTime(ev.timestamp)}</div>
                       {ev.modelId ? <div>Model: {ev.modelId}</div> : null}
                       {ev.toolId ? <div>Tool: {ev.toolId}</div> : null}
                       {ev.evidenceIds?.length ? (
-                        <div>Evidence: {ev.evidenceIds.join(', ')}</div>
+                        <div>Evidence: {ev.evidenceIds.join(", ")}</div>
                       ) : null}
                       {ev.details ? (
                         <p className="leading-relaxed">{ev.details}</p>
@@ -147,10 +150,11 @@ export function AuditPage() {
                             Policy decision
                           </div>
                           <div>
-                            {ev.policyDecision.decision} — {ev.policyDecision.reason}
+                            {ev.policyDecision.decision} —{" "}
+                            {ev.policyDecision.reason}
                           </div>
                           <div className="font-mono text-[10px] text-text-muted mt-0.5">
-                            {ev.policyDecision.policyName} ·{' '}
+                            {ev.policyDecision.policyName} ·{" "}
                             {ev.policyDecision.resource}
                           </div>
                         </div>
@@ -158,11 +162,11 @@ export function AuditPage() {
                     </div>
                   ) : null}
                 </li>
-              )
+              );
             })}
           </ul>
         </section>
       ) : null}
     </div>
-  )
+  );
 }

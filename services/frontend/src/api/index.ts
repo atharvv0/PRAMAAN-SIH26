@@ -1,5 +1,4 @@
-export { api, ApiClient, type CreateTaskInput, type DecideApprovalInput } from './client'
-
+export { api, ApiClient, ApiError, apiUrl, type CreateTaskInput, type DecideApprovalInput } from './client'
 export { getOverview } from './overview'
 export { getWorkspaces, getWorkspace } from './workspaces'
 export { getTasks, getTask, createTask } from './tasks'

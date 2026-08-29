@@ -4,7 +4,10 @@ from fastapi import APIRouter, HTTPException
 
 from services.backend.app.db.repository import repo
 from ..models.run import RunResult
-from services.orchestrator.errors import PramaanError
+from services.model_control.errors import ModelControlError
+from services.model_control.registry.registry_instance import default_registry as model_registry
+from services.model_control.router.router import select_model
+from services.orchestrator.errors import ModelUnavailableError, PlannerError, PramaanError
 from services.orchestrator.planner.planner import create_model_backed_plan, create_plan
 from services.orchestrator.state_graph.agent_state import AgentState
 from services.orchestrator.state_graph.executor import run_plan
@@ -38,15 +41,55 @@ def _result(task_id,state,run_id):
         tools.append({"id":f"inv_{task_id}_{i}","tool":c.tool_id,"status":"failed" if c.error else "completed","permission":"blocked" if c.error and "denied" in c.error.lower() else "allowed","reason":c.error or "Allowed by Policy Engine.","timestamp":now,"inputSummary":str(c.inputs),"outputSummary":str(c.output) if c.output is not None else c.error})
     return RunResult(run_id=run_id,task_id=task_id,status=_status(state),completed_steps=state.completed_steps,errors=[e.model_dump() for e in state.errors],evidence=[e.model_dump() for e in state.evidence],final_output=state.final_output,id=run_id,taskId=task_id,progress=_progress(state),currentStepId=state.current_step,plan=_plan(state),modelRoutings=routings,toolInvocations=tools,startedAt=state.events[0]["timestamp"] if state.events else now,updatedAt=now)
 
+def _build_plan(task_id:str, intent:str, file_path:str|None):
+    """Decide deterministic vs. model-backed planning.
+
+    services/orchestrator/README.md documents the production path as
+    "Task -> Model-backed Planner (Ollama via Model Control) -> validated
+    Plan -> ..." with the deterministic planner reserved for unit tests.
+    This used to be decided by checking whether the REASONING_MODEL_NAME env
+    var was literally set -- but services/model_control auto-discovers local
+    Ollama models even when that env var is absent (see
+    registry_instance.py's AUTO_DISCOVER_OLLAMA_MODELS), so a real,
+    available model would still be skipped in favour of the deterministic
+    planner. Ask the Model Router what it would actually select instead, so
+    "is a real model available" is answered the same way everywhere in the
+    system.
+    """
+    use_model_backed = False
+    try:
+        model = select_model(model_registry, capability="reasoning", modality="text")
+        use_model_backed = model.metadata().get("runtime") != "demo-offline"
+    except ModelControlError:
+        use_model_backed = False
+
+    if use_model_backed:
+        try:
+            # Pass the same registry we just checked availability against --
+            # create_model_backed_plan()'s default `registry` parameter is
+            # bound to model_control's own module-level singleton at def
+            # time, which is not necessarily the same object this function
+            # resolved `model` from (e.g. in tests, or if either module is
+            # reloaded/patched independently).
+            return create_model_backed_plan(task_id, intent, file_path=file_path, registry=model_registry)
+        except (ModelUnavailableError, PlannerError):
+            # A real model is registered but planning itself failed (model
+            # invocation error, malformed JSON, etc). Degrade to the
+            # deterministic planner rather than failing the task outright --
+            # this mirrors the demo-fallback-model degradation pattern used
+            # elsewhere in services/model_control.
+            pass
+
+    return create_plan(task_id, intent, file_path=file_path)
+
+
 def _load(task_id:str):
     found=repo.get_state(task_id)
     if not found: raise HTTPException(status_code=404,detail="task not found")
     task,run=found
     state=AgentState.model_validate(run.state_json) if run.state_json.get("plan") else AgentState(task_id=task_id,user_id=repo.get_user(task.created_by).email,intent=task.intent,files=[x["id"] for x in repo.files_for_task(task_id)])
     if state.plan is None:
-        import os
-        if os.environ.get("REASONING_MODEL_NAME","").strip(): state.plan=create_model_backed_plan(task_id,task.intent,file_path=repo.file_path_for_task(task_id))
-        else: state.plan=create_plan(task_id,task.intent,file_path=repo.file_path_for_task(task_id))
+        state.plan=_build_plan(task_id,task.intent,repo.file_path_for_task(task_id))
     return task,run,state
 
 def _persist(task_id,state,status):

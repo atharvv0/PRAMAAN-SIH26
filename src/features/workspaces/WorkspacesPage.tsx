@@ -1,19 +1,19 @@
-import { Link } from 'react-router-dom'
-import { DataTable, Td } from '@/components/common/DataTable'
+import { Link } from "react-router-dom";
+import { DataTable, Td } from "@/components/common/DataTable";
 import {
   EmptyState,
   ErrorState,
   LoadingState,
   PageHeader,
-} from '@/components/common/States'
-import { Button } from '@/components/ui/Button'
-import { useWorkspaces } from '@/hooks'
-import { useWorkbenchStore } from '@/store'
-import { cn, formatDateTime } from '@/lib/utils'
+} from "@/components/common/States";
+
+import { useWorkspaces } from "@/hooks";
+import { useWorkbenchStore } from "@/store";
+import { cn, formatDateTime } from "@/lib/utils";
 
 export function WorkspacesPage() {
-  const { data, isLoading, isError, refetch } = useWorkspaces()
-  const { workspaceId, setWorkspace } = useWorkbenchStore()
+  const { data, isLoading, isError, refetch } = useWorkspaces();
+  const { workspaceId, setWorkspace } = useWorkbenchStore();
 
   return (
     <div className="space-y-3">
@@ -25,7 +25,10 @@ export function WorkspacesPage() {
 
       {isLoading ? <LoadingState label="Loading workspaces…" /> : null}
       {isError ? (
-        <ErrorState title="Workspaces unavailable" onRetry={() => void refetch()} />
+        <ErrorState
+          title="Workspaces unavailable"
+          onRetry={() => void refetch()}
+        />
       ) : null}
 
       {!isLoading && !isError && data && data.length === 0 ? (
@@ -35,23 +38,23 @@ export function WorkspacesPage() {
       {!isLoading && !isError && data && data.length > 0 ? (
         <DataTable
           columns={[
-            'Workspace',
-            'Documents',
-            'Active tasks',
-            'Pending approvals',
-            'Deliverables',
-            'Updated',
-            '',
+            "Workspace",
+            "Documents",
+            "Active tasks",
+            "Pending approvals",
+            "Deliverables",
+            "Updated",
+            "",
           ]}
         >
           {data.map((ws) => {
-            const active = ws.id === workspaceId
+            const active = ws.id === workspaceId;
             return (
               <tr
                 key={ws.id}
                 className={cn(
-                  'hover:bg-raised/40',
-                  active && 'bg-accent-soft/30',
+                  "hover:bg-raised/40",
+                  active && "bg-accent-soft/30",
                 )}
               >
                 <Td>
@@ -97,10 +100,10 @@ export function WorkspacesPage() {
                   </div>
                 </Td>
               </tr>
-            )
+            );
           })}
         </DataTable>
       ) : null}
     </div>
-  )
+  );
 }

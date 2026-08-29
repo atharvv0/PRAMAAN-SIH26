@@ -27,7 +27,10 @@ def test_ingest_and_retrieve_relevant_chunk():
         ],
         source="sop_demo.txt",
     )
-    assert added == 3
+    # add_chunks() returns the list of Qdrant point ids it wrote, not a count
+    # (see services/knowledge/rag/store.py) -- this assertion was written
+    # against a stale return-type assumption.
+    assert len(added) == 3
 
     results = retriever.retrieve("what does the SOP say about pressure limits?", top_k=1)
     assert len(results) == 1

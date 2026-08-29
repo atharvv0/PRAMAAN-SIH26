@@ -1,6 +1,8 @@
+import { useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, Check, Clock3 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
+import { Textarea } from '@/components/ui/Field'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import {
   EmptyState,
@@ -15,125 +17,188 @@ import { formatDateTime } from '@/lib/utils'
 import type { ApprovalStatus } from '@/types/deliverable'
 
 export function ApprovalsPage() {
-  const { data, isLoading, isError, refetch } = useApprovals()
+  const query = useApprovals()
   const decide = useDecideApproval()
-  const user = useAuthStore((s) => s.user)
+  const user = useAuthStore((state) => state.user)
+  const [error, setError] = useState<string | null>(null)
+  const [notes, setNotes] = useState<Record<string, string>>({})
 
   async function onDecide(
     deliverableId: string,
     decision: Exclude<ApprovalStatus, 'pending'>,
   ) {
-    await decide.mutateAsync({
-      deliverableId,
-      decision,
-      actor: user?.id ?? 'insp.authority@mrpl.local',
-    })
+    setError(null)
+
+    try {
+      await decide.mutateAsync({
+        deliverableId,
+        decision,
+        actor: user?.id ?? 'local-session',
+        note: notes[deliverableId]?.trim() || undefined,
+      })
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Approval decision failed.')
+    }
   }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <PageHeader
-        eyebrow="HITL"
+        eyebrow="Human control"
         title="Approvals"
-        description="Human-in-the-loop review before deliverable finalisation."
+        description="Explicit review gates before a deliverable can be treated as approved."
       />
 
-      <div
-        className="border border-warning/35 bg-warning-soft px-3 py-2.5 flex items-start gap-2 text-[12.5px] text-warning"
-        role="status"
-      >
-        <AlertTriangle className="size-3.5 shrink-0 mt-0.5" aria-hidden />
-        <p>
-          Human approval required before finalisation. Local agents stage artefacts;
-          Inspection Authority must approve, request changes, or reject.
+      <div className="border border-warning/35 bg-warning-soft px-4 py-3 text-[11.5px] leading-relaxed text-warning">
+        <div className="flex items-center gap-2 font-semibold">
+          <AlertTriangle className="size-4" aria-hidden="true" />
+          Human decision required
+        </div>
+        <p className="mt-1">
+          PRAMAAN will not represent an approval outcome until the backend confirms the decision.
         </p>
       </div>
 
-      {isLoading ? <LoadingState label="Loading pending approvals…" /> : null}
-      {isError ? (
-        <ErrorState title="Approvals unavailable" onRetry={() => void refetch()} />
+      {error ? (
+        <ErrorState className="m-0" title="Decision failed" description={error} />
       ) : null}
 
-      {!isLoading && !isError && data && data.length === 0 ? (
-        <EmptyState
-          title="No pending approvals"
-          description="Queued human gates will appear here when deliverables require sign-off."
+      {query.isLoading ? <LoadingState label="Loading approval queue…" /> : null}
+
+      {query.isError ? (
+        <ErrorState
+          title="Approvals unavailable"
+          description="The local API could not return approval state."
+          onRetry={() => void query.refetch()}
         />
       ) : null}
 
-      {!isLoading && !isError && data
-        ? data.map((d) => (
-            <section key={d.id} className="border border-border bg-panel">
-              <SectionLabel>
-                {d.name} · {d.approvalStatus.replace(/_/g, ' ')}
+      {!query.isLoading && !query.isError && query.data?.length === 0 ? (
+        <EmptyState
+          title="No approvals waiting"
+          description="The backend reports no deliverables currently awaiting a human decision."
+        />
+      ) : null}
+
+      {!query.isLoading && !query.isError
+        ? query.data?.map((item) => (
+            <section key={item.id} className="border border-border bg-panel">
+              <SectionLabel right={<span className="font-mono text-[10px]">{item.id}</span>}>
+                {item.name}
               </SectionLabel>
-              <div className="p-3 space-y-3">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0 rail pl-3">
-                    <h2 className="text-[14px] font-semibold text-text">{d.name}</h2>
-                    <p className="text-[12px] text-text-secondary mt-1">
-                      Task: {d.taskTitle}
-                    </p>
-                    <p className="text-[12px] text-text-muted mt-2 leading-relaxed max-w-2xl">
-                      {d.provenanceSummary}
-                    </p>
+
+              <div className="grid gap-4 p-4 lg:grid-cols-[minmax(0,1fr)_300px]">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <StatusBadge status={item.status} />
+                    <span className="text-[11px] text-text-muted">
+                      Approval: {item.approvalStatus.replace(/_/g, ' ')}
+                    </span>
                   </div>
-                  <StatusBadge status={d.status} />
+
+                  <h2 className="mt-3 text-[14px] font-semibold text-text">{item.taskTitle}</h2>
+
+                  <p className="mt-2 max-w-3xl text-[12px] leading-relaxed text-text-secondary">
+                    {item.provenanceSummary ||
+                      'No provenance summary was returned by the backend.'}
+                  </p>
+
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Link
+                      to={`/evidence?taskId=${encodeURIComponent(item.taskId)}`}
+                      className="inline-flex h-7 items-center border border-border bg-raised px-2.5 text-[11px] font-medium text-text hover:bg-hover"
+                    >
+                      Review evidence
+                    </Link>
+                    <Link
+                      to={`/audit?taskId=${encodeURIComponent(item.taskId)}`}
+                      className="inline-flex h-7 items-center border border-border bg-raised px-2.5 text-[11px] font-medium text-text hover:bg-hover"
+                    >
+                      Open audit
+                    </Link>
+                  </div>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-px bg-border border border-border text-[12px]">
-                  <div className="bg-canvas px-3 py-2">
-                    <div className="text-micro text-text-muted mb-0.5">Evidence</div>
-                    <div className="font-mono text-text">{d.evidenceCount}</div>
+                <div className="border border-border bg-surface">
+                  <div className="grid grid-cols-2 gap-px bg-border">
+                    <Stat
+                      icon={<Clock3 aria-hidden="true" />}
+                      label="Created"
+                      value={formatDateTime(item.createdAt)}
+                    />
+                    <Stat
+                      icon={<Check aria-hidden="true" />}
+                      label="Evidence"
+                      value={String(item.evidenceCount)}
+                    />
                   </div>
-                  <div className="bg-canvas px-3 py-2">
-                    <div className="text-micro text-text-muted mb-0.5">Created</div>
-                    <div className="font-mono text-text text-[11px]">
-                      {formatDateTime(d.createdAt)}
+
+                  <div className="border-t border-border p-3">
+                    <div className="text-micro text-text-muted">Decision</div>
+
+                    <div className="mt-2 space-y-2">
+                      <Textarea
+                        value={notes[item.id] ?? ''}
+                        onChange={(event) =>
+                          setNotes((current) => ({
+                            ...current,
+                            [item.id]: event.target.value,
+                          }))
+                        }
+                        placeholder="Optional decision note"
+                        className="min-h-[78px]"
+                      />
+
+                      <div className="grid gap-2">
+                        <Button
+                          variant="primary"
+                          disabled={decide.isPending}
+                          onClick={() => void onDecide(item.id, 'approved')}
+                        >
+                          Approve
+                        </Button>
+                        <Button
+                          variant="warning"
+                          disabled={decide.isPending}
+                          onClick={() => void onDecide(item.id, 'changes_requested')}
+                        >
+                          Request changes
+                        </Button>
+                        <Button
+                          variant="danger"
+                          disabled={decide.isPending}
+                          onClick={() => void onDecide(item.id, 'rejected')}
+                        >
+                          Reject
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                  <div className="bg-canvas px-3 py-2 col-span-2 sm:col-span-1">
-                    <div className="text-micro text-text-muted mb-0.5">Type</div>
-                    <div className="capitalize text-text">{d.type}</div>
-                  </div>
-                </div>
-
-                <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-border">
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    disabled={decide.isPending}
-                    onClick={() => void onDecide(d.id, 'approved')}
-                  >
-                    Approve
-                  </Button>
-                  <Button
-                    variant="warning"
-                    size="sm"
-                    disabled={decide.isPending}
-                    onClick={() => void onDecide(d.id, 'changes_requested')}
-                  >
-                    Request changes
-                  </Button>
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    disabled={decide.isPending}
-                    onClick={() => void onDecide(d.id, 'rejected')}
-                  >
-                    Reject
-                  </Button>
-                  <Link
-                    to={`/evidence?taskId=${d.taskId}`}
-                    className="text-[12px] text-accent hover:underline ml-auto"
-                  >
-                    Open evidence →
-                  </Link>
                 </div>
               </div>
             </section>
           ))
         : null}
+    </div>
+  )
+}
+
+function Stat({
+  icon,
+  label,
+  value,
+}: {
+  icon: ReactNode
+  label: string
+  value: string
+}) {
+  return (
+    <div className="bg-surface p-3">
+      <div className="flex items-center gap-1.5 text-text-muted">
+        <span className="text-accent">{icon}</span>
+        <span className="text-micro">{label}</span>
+      </div>
+      <div className="mt-1.5 text-[11px] text-text">{value}</div>
     </div>
   )
 }
