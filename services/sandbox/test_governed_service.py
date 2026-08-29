@@ -1,6 +1,5 @@
 from services.sandbox.governed_service import GovernedSandboxService
 from services.sandbox.runner.contract import ExecutionRequest
-from services.governance.security.models import PolicyDecision
 
 
 def make_request(request_id, code):
@@ -17,17 +16,9 @@ def make_request(request_id, code):
 def test_allowed_execution():
     service = GovernedSandboxService()
 
-    decision = PolicyDecision(
-        decision="ALLOW",
-        reason="Role is authorized to use this tool",
-        role="admin",
-        action="execute_command",
-        timestamp="test",
-    )
-
     result = service.execute(
-        decision,
-        make_request("governed-allow", "print(2 + 3)")
+        "demo-admin",
+        make_request("governed-allow", "print(2 + 3)"),
     )
 
     assert result.status == "COMPLETED"
@@ -37,17 +28,9 @@ def test_allowed_execution():
 def test_denied_execution():
     service = GovernedSandboxService()
 
-    decision = PolicyDecision(
-        decision="DENY",
-        reason="Role is not authorized to use this tool",
-        role="user",
-        action="execute_command",
-        timestamp="test",
-    )
-
     result = service.execute(
-        decision,
-        make_request("governed-deny", "print(2 + 3)")
+        "demo-user",
+        make_request("governed-deny", "print(2 + 3)"),
     )
 
     assert result.status == "REJECTED"

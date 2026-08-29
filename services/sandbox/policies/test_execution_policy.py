@@ -1,4 +1,4 @@
-from execution_policy import ExecutionPolicyValidator
+from services.sandbox.policies.execution_policy import ExecutionPolicyValidator
 
 
 validator = ExecutionPolicyValidator()

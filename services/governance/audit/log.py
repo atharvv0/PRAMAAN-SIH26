@@ -34,11 +34,15 @@ class AuditLog:
             policy_reason=policy_reason,
             timestamp=datetime.now(timezone.utc).isoformat(),
         )
+
         self._events.append(event)
         return event
 
     def all(self) -> list[AuditEvent]:
         return list(self._events)
+
+    def clear(self) -> None:
+        self._events.clear()
 
 
 default_audit_log = AuditLog()

@@ -14,3 +14,12 @@ class PolicyDecision:
 class AgentRequest:
     role: str
     action: str
+
+
+@dataclass
+class AccessRequest:
+    status: str
+    requester_team: str
+    target_team: str
+    resource: str
+    permission: str
