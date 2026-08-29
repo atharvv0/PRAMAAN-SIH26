@@ -95,7 +95,7 @@ try:
         approval.requested_from,
         approval.status,
         approval.decision
-    )  
+    )
 
     for evidence in evidence_records:
         print(
@@ -225,7 +225,6 @@ try:
             workspace.name,
             workspace.sensitivity_class
         )
-    
     for task in tasks:
         print(
         "Task:",
@@ -240,7 +239,7 @@ try:
             project.project_id,
             project.name,
             project.status
-    ) 
+    )
 
 finally:
     db.close()
