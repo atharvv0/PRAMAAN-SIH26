@@ -2,7 +2,7 @@ version: "3.9"
 
 # PRAMAAN — Level 1 (SIH MVP) infra
 # One workstation / server target.
-# backend + frontend boot today (see services/backend, services/frontend).
+# backend + frontend boot today (see services/backend and services/frontend).
 # model-control/knowledge/governance/sandbox are in-process Python packages
 # imported by backend for the MVP (see docs/architecture.md "Deployment Topology")
 # and get their own containers post-SIH if warranted.
@@ -18,11 +18,22 @@ services:
     depends_on:
       - postgres
       - qdrant
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    environment:
+      POSTGRES_HOST: postgres
+      QDRANT_HOST: qdrant
+      MODEL_RUNTIME_HOST: host.docker.internal
     networks:
       - pramaan-net
 
   frontend:
-    build: ./services/frontend
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile
+      args:
+        VITE_API_MODE: http
+        VITE_API_BASE_URL: /api/v1
     env_file: .env
     ports:
       - "${FRONTEND_PORT:-3000}:80"
@@ -39,7 +50,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-pramaan}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "${POSTGRES_PORT:-5433}:5433"
     volumes:
       - pramaan-pgdata:/var/lib/postgresql/data
     networks:
@@ -54,8 +65,8 @@ services:
     networks:
       - pramaan-net
 
-  # model-runtime, sandbox, and governance/network-monitor services
-  # get added here as those modules are built (Phases 2, 4, 7).
+  # model-runtime, sandbox, and governance/network-monitor services remain
+  # in-process or are added separately as those modules mature.
 
 networks:
   pramaan-net:

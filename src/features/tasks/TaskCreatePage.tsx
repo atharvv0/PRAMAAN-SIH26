@@ -1,5 +1,6 @@
 import { useMemo, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { api } from '@/api'
 import { FilePlus2, Loader2, Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { Field, Input, Select, Textarea } from '@/components/ui/Field'
@@ -129,6 +130,9 @@ export function TaskCreatePage() {
         files: files.map((f) => ({ ...f, status: 'queued' as const })),
       })
       if (task.runId) {
+        if (api.mode === 'http') {
+          await api.runTask(task.id)
+        }
         navigate(`/runs/${task.runId}`)
       } else {
         navigate('/tasks')

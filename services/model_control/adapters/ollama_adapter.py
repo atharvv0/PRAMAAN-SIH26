@@ -21,7 +21,7 @@ import httpx
 
 from services.model_control.adapters.base import ModelAdapter, ModelResponse
 
-DEFAULT_TIMEOUT_SECONDS = 30.0
+DEFAULT_TIMEOUT_SECONDS = 120.0
 HEALTH_CHECK_TIMEOUT_SECONDS = 2.0
 
 
@@ -54,7 +54,7 @@ class OllamaAdapter(ModelAdapter):
                     "model": self.model_name,
                     "prompt": prompt,
                     "stream": False,
-                    **{k: v for k, v in kwargs.items() if k in ("options", "system", "format")},
+                    **{k: v for k, v in kwargs.items() if k in ("options", "system", "format", "think")},
                 },
                 timeout=self.timeout_seconds,
             )
@@ -71,6 +71,8 @@ class OllamaAdapter(ModelAdapter):
             model_id=self.id,
             text=data.get("response", ""),
             latency_ms=latency_ms,
+            input_tokens=data.get("prompt_eval_count"),
+            output_tokens=data.get("eval_count"),
             raw=data,
         )
 
@@ -80,7 +82,7 @@ class OllamaAdapter(ModelAdapter):
             if resp.status_code != 200:
                 return False
             tags = resp.json().get("models", [])
-            return any(self.model_name in (m.get("name") or "") for m in tags) or bool(tags)
+            return any((m.get("name") or "") == self.model_name for m in tags)
         except (httpx.HTTPError, ValueError):
             return False
 
@@ -90,4 +92,5 @@ class OllamaAdapter(ModelAdapter):
             "runtime": "ollama",
             "model_name": self.model_name,
             "base_url": self.base_url,
+            "allow_restricted": self.base_url.startswith(("http://127.0.0.1", "http://localhost")),
         }

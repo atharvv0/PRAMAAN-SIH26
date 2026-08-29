@@ -15,7 +15,7 @@ docker compose up --build
 ```
 
 This currently boots: `postgres`, `qdrant`, `backend` (FastAPI, `GET /api/v1/health`),
-`frontend` (static placeholder page). Everything else (`model_control`, `knowledge`,
+`frontend` (React/Vite workbench). Everything else (`model_control`, `knowledge`,
 `governance`, `sandbox`, `orchestrator`) is imported as a Python package by `backend` —
 see `docs/architecture.md` "Deployment Topology".
 

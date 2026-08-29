@@ -148,6 +148,11 @@ The tools behind this response (`file.read`, `text.summarize_naive`,
 `services/orchestrator/tools/examples.py`. Real tools replace them without changing
 this response shape.
 
+## Frontend integration endpoints (MVP)
+
+The current React workbench uses these JSON endpoints in addition to the core task/run lifecycle:
+`GET /api/v1/overview`, `GET /api/v1/workspaces`, `GET /api/v1/workspaces/{workspace_id}`, `GET /api/v1/evidence`, `GET /api/v1/evidence/{evidence_id}`, `GET /api/v1/models`, `GET /api/v1/audit`, `GET /api/v1/sovereignty`, `GET /api/v1/network-events`, `GET /api/v1/deliverables`, `GET /api/v1/approvals`, and `POST /api/v1/approvals/decide`. These endpoints are in-process MVP adapters over the same task/run state and are intentionally replaceable by repository-backed services.
+
 ## Error Shape (all non-2xx responses)
 
 ```json

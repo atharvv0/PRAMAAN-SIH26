@@ -61,5 +61,7 @@ pytest services/backend/tests
 - [x] `/tasks/{task_id}/approve` genuinely resumes a paused run
 - [x] `/tasks/{task_id}/events` exposes the full lifecycle event log
 - [ ] `/tasks` backed by a real repository instead of the in-memory dict
-- [ ] `/runs/{run_id}` as its own lookup, not just the terminal `/run` response
-- [ ] Every endpoint in `docs/api-contract.md` marked "implemented" has a passing test
+- [x] `/runs/{run_id}` returns the canonical run state for the current in-process MVP
+- [x] Frontend metadata endpoints (`overview`, `workspaces`, `evidence`, `audit`, `models`, `sovereignty`, `network-events`, `deliverables`, `approvals`) are reachable and JSON-compatible
+- [x] Every current frontend API surface has a backend route
+- [ ] Task/run persistence backed by a real repository instead of the in-memory store

@@ -18,6 +18,8 @@ class ModelResponse(BaseModel):
     model_id: str
     text: str
     latency_ms: int | None = None
+    input_tokens: int | None = None
+    output_tokens: int | None = None
     raw: dict | None = None
 
 

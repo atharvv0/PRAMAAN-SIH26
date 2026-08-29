@@ -1,90 +1,41 @@
-"""
-OllamaVlmAdapter — real ModelAdapter (docs/agent-contract.md) for vision/P&ID
-understanding via a local Ollama vision model (e.g. llava, moondream, or a
-Qwen-VL-class model once available through Ollama — per docs/architecture.md
-Model Strategy: "Vision/P&ID: use a VLM appropriate for drawing and image
-reasoning").
-
-STATUS: code only, UNTESTED. This sandbox has no Ollama server running and no
-network route to one — I could not verify this against a real model. **You must
-test this on your own machine** with Ollama installed and a vision model pulled
-(e.g. `ollama pull llava`) before relying on it for the demo:
-
-    from services.knowledge.ocr_vlm.ollama_vlm_adapter import OllamaVlmAdapter
-    adapter = OllamaVlmAdapter(model="llava")
-    print(adapter.health_check())
-    print(adapter.invoke("/path/to/a/pid_drawing.png", prompt="Describe this P&ID"))
-
-Talks to Ollama's HTTP API (default http://localhost:11434) — set
-OLLAMA_HOST in .env if it runs elsewhere. Raises ModelUnavailableError on any
-connection/inference failure, same pattern as PaddleOcrAdapter.
-"""
 from __future__ import annotations
 
 import base64
 import os
+import time
 from pathlib import Path
+
+import httpx
 
 from services.orchestrator.errors import ModelUnavailableError
 
-DEFAULT_OLLAMA_HOST = "http://localhost:11434"
-
 
 class OllamaVlmAdapter:
-    capabilities = ["vision", "document_analysis"]
+    capabilities = ["vision", "document_analysis", "ocr"]
 
-    def __init__(self, model: str = "llava", host: str | None = None):
-        self.id = f"ollama_vlm:{model}"
-        self._model = model
-        self._host = host or os.environ.get("OLLAMA_HOST", DEFAULT_OLLAMA_HOST)
+    def __init__(self, model: str | None = None, host: str | None = None, port: int | None = None):
+        self._model = model or os.environ.get("VISION_MODEL_NAME") or os.environ.get("OCR_MODEL_NAME") or "gemma3:4b"
+        self._host = host or os.environ.get("MODEL_RUNTIME_HOST", "localhost")
+        self._port = port or int(os.environ.get("MODEL_RUNTIME_PORT", "11434"))
+        self.id=f"ollama-vlm:{self._model}"
+        self.base_url=f"http://{self._host}:{self._port}"
 
-    def invoke(self, image_path: str, prompt: str = "Describe this image in detail.") -> dict:
+    def invoke(self, image_path: str, prompt: str = "Extract the visible information accurately. Describe only what is supported by the image.") -> dict:
         try:
-            import httpx
+            image_b64=base64.b64encode(Path(image_path).read_bytes()).decode("utf-8")
+            start=time.monotonic()
+            resp=httpx.post(f"{self.base_url}/api/generate",json={"model":self._model,"prompt":prompt,"images":[image_b64],"stream":False,"think":False,"options":{"temperature":0}},timeout=180.0)
+            resp.raise_for_status(); data=resp.json()
+        except Exception as exc:
+            raise ModelUnavailableError(f"Ollama VLM ({self._model}) failed: {exc}",detail=repr(exc)) from exc
+        text=str(data.get("response","")).strip()
+        return {"content":text,"path":image_path,"model_id":self.id,"latency_ms":int((time.monotonic()-start)*1000),"evidence":[{"claim":text,"source":image_path,"page_or_region":None,"model":self.id,"confidence":None,"validation_state":"unverified"}]}
 
-            image_b64 = base64.b64encode(Path(image_path).read_bytes()).decode("utf-8")
-            response = httpx.post(
-                f"{self._host}/api/generate",
-                json={
-                    "model": self._model,
-                    "prompt": prompt,
-                    "images": [image_b64],
-                    "stream": False,
-                },
-                timeout=120.0,
-            )
-            response.raise_for_status()
-            data = response.json()
-        except Exception as exc:  # noqa: BLE001 — any failure -> typed, retryable error
-            raise ModelUnavailableError(
-                f"Ollama VLM ({self._model}) could not process '{image_path}': {exc}",
-                detail=repr(exc),
-            ) from exc
-
-        description = data.get("response", "")
-        return {
-            "content": description,
-            "path": image_path,
-            "evidence": [
-                {
-                    "claim": description,
-                    "source": image_path,
-                    "page_or_region": None,
-                    "model": self.id,
-                    "confidence": None,
-                    "validation_state": "unverified",
-                }
-            ],
-        }
-
-    def health_check(self) -> bool:
+    def health_check(self)->bool:
         try:
-            import httpx
+            r=httpx.get(f"{self.base_url}/api/tags",timeout=3.0); r.raise_for_status()
+            return any((m.get("name") or "")==self._model for m in r.json().get("models",[]))
+        except Exception:return False
 
-            resp = httpx.get(f"{self._host}/api/tags", timeout=5.0)
-            return resp.status_code == 200
-        except Exception:
-            return False
-
-    def metadata(self) -> dict:
-        return {"id": self.id, "capabilities": self.capabilities, "host": self._host}
+    def metadata(self)->dict:
+        return {"id":self.id,"model_name":self._model,"capabilities":self.capabilities,"modalities":["image"],"runtime":"ollama","local":True}

@@ -1,11 +1,16 @@
 """
-Tests for the OCR/VLM adapters' error-handling contract. These do NOT test real
-model inference (PaddleOCR needs internet access to download weights; the Ollama
-VLM adapter needs a running Ollama server — neither is available in this sandbox,
-see each adapter's module docstring). What IS tested: both adapters correctly
-raise ModelUnavailableError instead of crashing when the underlying model/service
-is unreachable — the real behaviour every caller depends on.
+Tests for OCR/VLM adapter error-handling contracts.
+
+These tests are deterministic and do not depend on whether PaddleOCR model
+weights happen to be cached on the developer machine.
+
+The production adapters must:
+- wrap underlying OCR/model failures as ModelUnavailableError
+- report health accurately based on actual initialization/reachability
 """
+
+from unittest.mock import patch
+
 import pytest
 
 from services.orchestrator.errors import ModelUnavailableError
@@ -15,27 +20,35 @@ def test_paddle_ocr_adapter_raises_model_unavailable_on_failure():
     from services.knowledge.ocr_vlm.paddle_adapter import PaddleOcrAdapter
 
     adapter = PaddleOcrAdapter()
-    # In this sandbox PaddleOCR cannot download its model weights (no network
-    # route to the model hosting platform) — this is the real, current failure
-    # mode, not a simulated one. On a machine with internet access this call
-    # would instead need a real image path and would succeed.
-    with pytest.raises(ModelUnavailableError):
-        adapter.invoke("data/samples/demo/sample_note.txt")
+
+    with patch(
+        "services.knowledge.ocr_vlm.paddle_adapter._get_ocr",
+        side_effect=RuntimeError("PaddleOCR model unavailable"),
+    ):
+        with pytest.raises(ModelUnavailableError):
+            adapter.invoke("data/samples/demo/sample_note.txt")
 
 
 def test_paddle_ocr_adapter_health_check_reports_false_when_unavailable():
     from services.knowledge.ocr_vlm.paddle_adapter import PaddleOcrAdapter
 
     adapter = PaddleOcrAdapter()
-    assert adapter.health_check() is False
+
+    with patch(
+        "services.knowledge.ocr_vlm.paddle_adapter._get_ocr",
+        side_effect=RuntimeError("PaddleOCR model unavailable"),
+    ):
+        assert adapter.health_check() is False
 
 
 def test_ollama_vlm_adapter_raises_model_unavailable_when_no_server_reachable():
     from services.knowledge.ocr_vlm.ollama_vlm_adapter import OllamaVlmAdapter
 
-    adapter = OllamaVlmAdapter(model="llava", host="http://localhost:11434")
-    # No Ollama server is running in this sandbox — real connection failure,
-    # correctly wrapped rather than propagated as a raw httpx exception.
+    adapter = OllamaVlmAdapter(
+        model="llava",
+        host="http://localhost:11434",
+    )
+
     with pytest.raises(ModelUnavailableError):
         adapter.invoke("data/samples/demo/sample_note.txt")
 
@@ -43,5 +56,9 @@ def test_ollama_vlm_adapter_raises_model_unavailable_when_no_server_reachable():
 def test_ollama_vlm_adapter_health_check_reports_false_when_unreachable():
     from services.knowledge.ocr_vlm.ollama_vlm_adapter import OllamaVlmAdapter
 
-    adapter = OllamaVlmAdapter(model="llava", host="http://localhost:11434")
+    adapter = OllamaVlmAdapter(
+        model="llava",
+        host="http://localhost:11434",
+    )
+
     assert adapter.health_check() is False

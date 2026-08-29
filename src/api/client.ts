@@ -5,7 +5,7 @@ import type { EvidenceRecord } from '@/types/evidence'
 import type { ModelAdapter } from '@/types/model'
 import type { DashboardOverview } from '@/types/overview'
 import type { NetworkEvent, SovereigntyStatus } from '@/types/sovereignty'
-import type { TaskDefinition } from '@/types/task'
+import type { TaskDefinition, TaskFile } from '@/types/task'
 import type { Workspace } from '@/types/workspace'
 import {
   mockApi,
@@ -16,59 +16,143 @@ import {
 const mode = (import.meta.env.VITE_API_MODE as string | undefined) ?? 'mock'
 const baseUrl = (import.meta.env.VITE_API_BASE_URL as string | undefined) ?? ''
 
-function backendUnavailable(operation: string): never {
-  throw new Error(
-    `Backend not connected: ${operation} requires a live API. Set VITE_API_MODE=mock or configure VITE_API_BASE_URL.`,
-  )
+export class ApiError extends Error {
+  readonly status: number
+  readonly code?: string
+
+  constructor(message: string, status: number, code?: string) {
+    super(message)
+    this.name = 'ApiError'
+    this.status = status
+    this.code = code
+  }
 }
 
-async function httpJson<T>(_path: string, _init?: RequestInit): Promise<T> {
+async function httpJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!baseUrl) {
-    backendUnavailable(_path)
+    throw new ApiError(`Backend URL is not configured for ${path}.`, 0)
   }
-  backendUnavailable(_path)
+
+  const headers = new Headers(init.headers)
+  headers.set('Accept', 'application/json')
+  if (init.body && !headers.has('Content-Type')) {
+    headers.set('Content-Type', 'application/json')
+  }
+
+  const response = await fetch(`${baseUrl.replace(/\/$/, '')}${path}`, {
+    ...init,
+    headers,
+  })
+
+  const text = await response.text()
+  let body: unknown = null
+  if (text) {
+    try {
+      body = JSON.parse(text)
+    } catch {
+      body = null
+    }
+  }
+
+  if (!response.ok) {
+    const errorBody = body as { error?: { message?: string; code?: string } } | null
+    throw new ApiError(
+      errorBody?.error?.message ?? `Request failed with HTTP ${response.status}`,
+      response.status,
+      errorBody?.error?.code,
+    )
+  }
+
+  return body as T
+}
+
+function mapTask(task: Record<string, unknown>): TaskDefinition {
+  return {
+    id: String(task.id ?? task.task_id),
+    title: String(task.title ?? 'PRAMAAN Task'),
+    instruction: String(task.instruction ?? ''),
+    workspaceId: String(task.workspaceId ?? 'ws-default'),
+    workspaceName: String(task.workspaceName ?? 'PRAMAAN Sovereign Workspace'),
+    status: (task.status as TaskDefinition['status']) ?? 'queued',
+    progress: Number(task.progress ?? 0),
+    currentStep: task.currentStep as string | undefined,
+    model: task.model as string | undefined,
+    createdBy: String(task.createdBy ?? 'demo.operator@local'),
+    createdAt: String(task.createdAt ?? task.created_at ?? new Date().toISOString()),
+    updatedAt: String(task.updatedAt ?? task.createdAt ?? new Date().toISOString()),
+    elapsedMs: Number(task.elapsedMs ?? 0),
+    files: (Array.isArray(task.files) ? task.files : []) as TaskFile[],
+    runId: task.runId as string | undefined,
+  }
+}
+
+function mapRun(run: Record<string, unknown>): AgentState {
+  return {
+    id: String(run.id ?? run.run_id),
+    taskId: String(run.taskId ?? run.task_id),
+    status: (run.status as AgentState['status']) ?? 'queued',
+    currentStepId: run.currentStepId as string | undefined,
+    progress: Number(run.progress ?? 0),
+    plan: (Array.isArray(run.plan) ? run.plan : []) as AgentState['plan'],
+    modelRoutings: (Array.isArray(run.modelRoutings) ? run.modelRoutings : []) as AgentState['modelRoutings'],
+    toolInvocations: (Array.isArray(run.toolInvocations) ? run.toolInvocations : []) as AgentState['toolInvocations'],
+    startedAt: String(run.startedAt ?? new Date().toISOString()),
+    updatedAt: String(run.updatedAt ?? new Date().toISOString()),
+  }
 }
 
 export class ApiClient {
   readonly mode: 'mock' | 'http' = mode === 'mock' ? 'mock' : 'http'
 
   getOverview(): Promise<DashboardOverview> {
-    if (this.mode === 'mock') return mockApi.getOverview()
-    return httpJson<DashboardOverview>('/overview')
+    return this.mode === 'mock' ? mockApi.getOverview() : httpJson<DashboardOverview>('/overview')
   }
 
   getWorkspaces(): Promise<Workspace[]> {
-    if (this.mode === 'mock') return mockApi.getWorkspaces()
-    return httpJson<Workspace[]>('/workspaces')
+    return this.mode === 'mock' ? mockApi.getWorkspaces() : httpJson<Workspace[]>('/workspaces')
   }
 
   getWorkspace(id: string): Promise<Workspace> {
-    if (this.mode === 'mock') return mockApi.getWorkspace(id)
-    return httpJson<Workspace>(`/workspaces/${id}`)
+    return this.mode === 'mock' ? mockApi.getWorkspace(id) : httpJson<Workspace>(`/workspaces/${id}`)
   }
 
   getTasks(workspaceId?: string): Promise<TaskDefinition[]> {
     if (this.mode === 'mock') return mockApi.getTasks(workspaceId)
     const q = workspaceId ? `?workspaceId=${encodeURIComponent(workspaceId)}` : ''
-    return httpJson<TaskDefinition[]>(`/tasks${q}`)
+    return httpJson<Record<string, unknown>[]>(`/tasks${q}`).then((items) => items.map(mapTask))
   }
 
   getTask(id: string): Promise<TaskDefinition> {
     if (this.mode === 'mock') return mockApi.getTask(id)
-    return httpJson<TaskDefinition>(`/tasks/${id}`)
+    return httpJson<Record<string, unknown>>(`/tasks/${id}`).then(mapTask)
   }
 
   createTask(input: CreateTaskInput): Promise<TaskDefinition> {
     if (this.mode === 'mock') return mockApi.createTask(input)
-    return httpJson<TaskDefinition>('/tasks', {
+    return httpJson<Record<string, unknown>>('/tasks', {
       method: 'POST',
       body: JSON.stringify(input),
-    })
+    }).then(mapTask)
+  }
+
+  runTask(taskId: string) {
+    if (this.mode === 'mock') return mockApi.getRun('')
+    return httpJson<Record<string, unknown>>(`/tasks/${taskId}/run`, { method: 'POST' }).then(mapRun)
+  }
+
+  approveTask(taskId: string) {
+    if (this.mode === 'mock') return mockApi.getRun('')
+    return httpJson<Record<string, unknown>>(`/tasks/${taskId}/approve`, { method: 'POST' }).then(mapRun)
   }
 
   getRun(runId: string): Promise<AgentState> {
     if (this.mode === 'mock') return mockApi.getRun(runId)
-    return httpJson<AgentState>(`/runs/${runId}`)
+    return httpJson<Record<string, unknown>>(`/runs/${runId}`).then(mapRun)
+  }
+
+  getTaskEvents(taskId: string): Promise<Array<Record<string, unknown>>> {
+    if (this.mode === 'mock') return Promise.resolve([])
+    return httpJson<Array<Record<string, unknown>>>(`/tasks/${taskId}/events`)
   }
 
   getEvidence(taskId?: string, runId?: string): Promise<EvidenceRecord[]> {
@@ -81,8 +165,7 @@ export class ApiClient {
   }
 
   getEvidenceById(id: string): Promise<EvidenceRecord> {
-    if (this.mode === 'mock') return mockApi.getEvidenceById(id)
-    return httpJson<EvidenceRecord>(`/evidence/${id}`)
+    return this.mode === 'mock' ? mockApi.getEvidenceById(id) : httpJson<EvidenceRecord>(`/evidence/${id}`)
   }
 
   getDeliverables(taskId?: string): Promise<Deliverable[]> {
@@ -92,8 +175,7 @@ export class ApiClient {
   }
 
   getApprovals(): Promise<Deliverable[]> {
-    if (this.mode === 'mock') return mockApi.getApprovals()
-    return httpJson<Deliverable[]>('/approvals')
+    return this.mode === 'mock' ? mockApi.getApprovals() : httpJson<Deliverable[]>('/approvals')
   }
 
   decideApproval(input: DecideApprovalInput): Promise<Deliverable> {
@@ -111,21 +193,17 @@ export class ApiClient {
   }
 
   getModels(): Promise<ModelAdapter[]> {
-    if (this.mode === 'mock') return mockApi.getModels()
-    return httpJson<ModelAdapter[]>('/models')
+    return this.mode === 'mock' ? mockApi.getModels() : httpJson<ModelAdapter[]>('/models')
   }
 
   getSovereignty(): Promise<SovereigntyStatus> {
-    if (this.mode === 'mock') return mockApi.getSovereignty()
-    return httpJson<SovereigntyStatus>('/sovereignty')
+    return this.mode === 'mock' ? mockApi.getSovereignty() : httpJson<SovereigntyStatus>('/sovereignty')
   }
 
   getNetworkEvents(): Promise<NetworkEvent[]> {
-    if (this.mode === 'mock') return mockApi.getNetworkEvents()
-    return httpJson<NetworkEvent[]>('/network-events')
+    return this.mode === 'mock' ? mockApi.getNetworkEvents() : httpJson<NetworkEvent[]>('/network-events')
   }
 }
 
 export const api = new ApiClient()
-
 export type { CreateTaskInput, DecideApprovalInput }

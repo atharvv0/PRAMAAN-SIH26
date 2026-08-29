@@ -1,39 +1,43 @@
-# services/frontend — Workbench UI
+# services/frontend — PRAMAAN Workbench UI
 
-**Owner:** Role 6 — Frontend/UX + Product (per `docs/team-structure.md`)
+The production frontend is the React + TypeScript + Vite application in this directory.
+It is intentionally separated from the backend and other Python services.
 
-## What belongs here
+## Structure
 
-- `src/pages/` — Task creation, Run view, Evidence panel, Approval queue, Deliverables
-- `src/components/` — shared UI pieces
-- `src/evidence_panel/` — click-to-source multimodal evidence view (a signature
-  differentiator per `docs/architecture.md`)
+- `src/` — application routes, pages, components, API client, types and state
 - `public/` — static assets
+- `nginx.conf` — production reverse proxy; `/api/` is forwarded to the backend container
+- `Dockerfile` — two-stage Vite build + nginx runtime
 
-## What does NOT belong here
+## API mode
 
-- Any assumption about internal agent/LangGraph state. This app talks **only** to
-  `docs/api-contract.md` — Task, TaskStep, AgentRun, ToolCall, Evidence, Approval,
-  Deliverable. If an endpoint you need isn't in that doc, that's a signal to raise it
-  with Role 1/3, not to reach around the API.
+The final integration uses `VITE_API_MODE=http`. The browser talks to `/api/v1`, and nginx proxies those requests to the backend. The deterministic mock adapter remains in `src/mocks/` for local UI development/tests, but the production/demo path must use the live backend.
 
-## Status of this scaffold
-
-`public/index.html` + `Dockerfile` are a **placeholder only** — a static "coming soon"
-page so `docker compose up --build` boots this service end-to-end today. No real UI has
-been built. Stack choice (plain HTML/CSS/JS/Bootstrap/PWA per the dossier, or a
-framework) is yours to decide.
-
-## Run it
+## Run locally
 
 ```bash
-docker compose up frontend
-# -> http://localhost:3000 (placeholder page)
+npm ci
+npm run dev
 ```
 
-## Definition of Done (Phase 9, see docs/roadmap.md)
+## Production container
 
-- [ ] Task creation form wired to `POST /api/v1/tasks`
-- [ ] Live run/event view wired to `GET /api/v1/runs/{run_id}/events`
-- [ ] Evidence panel: click a claim -> see exact source region
-- [ ] Approval queue UI wired to `POST /api/v1/runs/{run_id}/approve`
+From the repository root:
+
+```bash
+docker compose up --build frontend backend
+```
+
+The workbench should be reachable at the frontend port configured in the root `.env`.
+
+## Final integration checklist
+
+- [ ] Task creation uses `POST /api/v1/tasks`
+- [ ] Run view uses the live run/task event endpoints
+- [ ] Evidence page uses live evidence responses
+- [ ] Approval UI uses live approval endpoints
+- [ ] Deliverables page uses live deliverable responses
+- [ ] Models page shows actual Model Control registry data
+- [ ] Sovereignty page shows actual policy/network data
+- [ ] `VITE_API_MODE=http` in the production/demo build

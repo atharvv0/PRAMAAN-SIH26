@@ -37,5 +37,8 @@ class ModelRegistry:
             candidates = [m for m in candidates if modality in m.modalities]
         return candidates
 
+    def all(self) -> list[ModelAdapter]:
+        return list(self._models.values())
+
     def all_metadata(self) -> list[dict]:
         return [m.metadata() for m in self._models.values()]

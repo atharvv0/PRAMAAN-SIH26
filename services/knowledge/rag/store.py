@@ -1,65 +1,84 @@
-"""
-VectorStore — thin wrapper around qdrant-client for ingest + similarity search.
-
-Real and testable fully offline via QdrantClient(":memory:") — see
-services/knowledge/tests/test_rag.py. Production points this at the real `qdrant`
-service (docker-compose.yml) using services.backend.app.core.config.settings
-(qdrant_host/qdrant_port) instead of ":memory:" — pass a real QdrantClient in via
-the `client` constructor argument, don't hard-code the connection here.
-"""
 from __future__ import annotations
 
 from uuid import uuid4
+from typing import Any
 
-from qdrant_client import QdrantClient
-from qdrant_client.models import Distance, PointStruct, VectorParams
+from services.knowledge.rag.embeddings import embed_text, embed_texts, embedding_dimension
 
-from services.knowledge.rag.embeddings import EMBEDDING_DIM, embed_text, embed_texts
+try:
+    from qdrant_client import QdrantClient
+    from qdrant_client.models import Distance, PointStruct, VectorParams
+except ImportError:  # optional for true local in-memory development
+    QdrantClient = Any  # type: ignore[misc,assignment]
+    Distance = PointStruct = VectorParams = None  # type: ignore[assignment]
 
 
 class VectorStore:
     def __init__(self, client: QdrantClient, collection: str = "pramaan_knowledge"):
         self._client = client
         self._collection = collection
-        self._ensure_collection()
+        self._collection_ready = False
 
-    def _ensure_collection(self) -> None:
-        existing = [c.name for c in self._client.get_collections().collections]
-        if self._collection not in existing:
+    def _ensure_collection(self, size: int | None = None) -> None:
+        if self._collection_ready:
+            return
+        try:
+            exists = self._client.collection_exists(self._collection)
+        except AttributeError:
+            exists = self._collection in [c.name for c in self._client.get_collections().collections]
+        if not exists:
+            dim = size or embedding_dimension()
             self._client.create_collection(
                 collection_name=self._collection,
-                vectors_config=VectorParams(size=EMBEDDING_DIM, distance=Distance.COSINE),
+                vectors_config=VectorParams(size=dim, distance=Distance.COSINE),
             )
+        self._collection_ready = True
 
-    def add_chunks(self, chunks: list[str], source: str) -> int:
-        """Embeds and stores `chunks`, tagging each with `source` (e.g. a file path
-        or SOP id) and its index within that source for page/region-style
-        provenance. Returns the number of chunks stored."""
+    def add_chunks(self, chunks: list[str], source: str, metadata: dict | None = None) -> list[str]:
         if not chunks:
-            return 0
+            return []
         vectors = embed_texts(chunks)
-        points = [
-            PointStruct(
-                id=str(uuid4()),
-                vector=vector,
-                payload={"text": chunk, "source": source, "chunk_index": i},
-            )
-            for i, (chunk, vector) in enumerate(zip(chunks, vectors))
-        ]
+        self._ensure_collection(len(vectors[0]))
+        ids=[]
+        points=[]
+        for i, (chunk, vector) in enumerate(zip(chunks, vectors)):
+            point_id=str(uuid4())
+            ids.append(point_id)
+            payload={"text":chunk,"source":source,"chunk_index":i, **(metadata or {})}
+            points.append(PointStruct(id=point_id, vector=vector, payload=payload))
         self._client.upsert(collection_name=self._collection, points=points)
-        return len(points)
+        return ids
 
     def search(self, query: str, top_k: int = 3) -> list[dict]:
-        query_vector = embed_text(query)
-        response = self._client.query_points(
-            collection_name=self._collection, query=query_vector, limit=top_k
-        )
-        return [
-            {
-                "text": point.payload["text"],
-                "source": point.payload["source"],
-                "chunk_index": point.payload["chunk_index"],
-                "score": point.score,
-            }
-            for point in response.points
-        ]
+        self._ensure_collection(len(embed_text(query)))
+        response = self._client.query_points(collection_name=self._collection, query=embed_text(query), limit=top_k)
+        return [{"text":p.payload["text"],"source":p.payload["source"],"chunk_index":p.payload.get("chunk_index",0),"score":p.score,"point_id":str(p.id)} for p in response.points]
+
+
+class MemoryVectorStore:
+    """Tiny deterministic cosine-search store for local/offline development without Qdrant."""
+    def __init__(self):
+        self._items: list[dict] = []
+
+    def add_chunks(self, chunks: list[str], source: str, metadata: dict | None = None) -> list[str]:
+        if not chunks:
+            return []
+        vectors = embed_texts(chunks)
+        ids=[]
+        for i,(chunk,vector) in enumerate(zip(chunks,vectors)):
+            point_id=str(uuid4()); ids.append(point_id)
+            self._items.append({"id":point_id,"text":chunk,"source":source,"chunk_index":i,"vector":vector,**(metadata or {})})
+        return ids
+
+    def search(self, query: str, top_k: int = 3) -> list[dict]:
+        import math
+        q=embed_text(query)
+        def dot(a,b): return sum(x*y for x,y in zip(a,b))
+        scored=[]
+        qnorm=math.sqrt(dot(q,q)) or 1.0
+        for item in self._items:
+            v=item["vector"]; vnorm=math.sqrt(dot(v,v)) or 1.0
+            score=dot(q,v)/(qnorm*vnorm)
+            scored.append((score,item))
+        scored.sort(key=lambda x:x[0], reverse=True)
+        return [{"text":it["text"],"source":it["source"],"chunk_index":it.get("chunk_index",0),"score":score,"point_id":it["id"]} for score,it in scored[:top_k]]
