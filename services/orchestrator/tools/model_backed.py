@@ -10,13 +10,14 @@ from services.model_control.errors import ModelControlError
 from services.model_control.router.router import select_model
 from services.orchestrator.errors import ModelUnavailableError
 from services.orchestrator.tools.base import ToolAdapter
-import re
 
 
 def _clean_model_text(text: str) -> str:
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL)
-    text = re.sub(r"<analysis>.*?</analysis>", "", text, flags=re.IGNORECASE | re.DOTALL)
-    return text.strip()
+    import re
+    value = str(text or "")
+    value = re.sub(r"<think>.*?</think>", "", value, flags=re.I | re.S)
+    value = re.sub(r"<analysis>.*?</analysis>", "", value, flags=re.I | re.S)
+    return value.strip()
 
 
 def _select(capability: str):
@@ -79,9 +80,14 @@ class SummarizeTextModelTool(ToolAdapter):
                 "SummarizeTextModelTool found no upstream content to summarize"
             )
 
+        import re
+        task_intent = str(inputs.get("intent") or "").strip()
+        line_match = re.search(r"\b(\d+)\s*(?:-| )?lines?\b", task_intent, flags=re.I)
+        constraint = (f"Produce exactly {line_match.group(1)} lines.\n" if line_match else "")
         model = _select("summarize_text")
         response = model.invoke(
-            "Summarize the following source material in 2-3 concise sentences. "
+            constraint +
+            "Summarize the following source material in 2-3 concise sentences unless the task requires a specific output constraint. "
             "Preserve important facts, numbers, deficiencies, and safety-relevant "
             "details. Do not invent information.\n\n" + str(content),
             system=(
@@ -157,7 +163,7 @@ class CodingModelTool(ToolAdapter):
             think=False,
         )
 
-        code = _clean_model_text(response.text)
+        code = response.text.strip()
         if code.startswith("```"):
             code = code.replace("```python", "", 1).replace("```", "").strip()
 

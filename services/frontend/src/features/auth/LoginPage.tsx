@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/Button'
 import { Field, Input } from '@/components/ui/Field'
 import { useAuthStore, useWorkbenchStore } from '@/store'
 import { authenticateLocalAccount, passwordPolicy, registerLocalAccount } from '@/lib/localAuth'
-import { api } from '@/api'
 import { cn } from '@/lib/utils'
 
 const roles = [
@@ -48,19 +47,11 @@ export function LoginPage() {
     setError('')
     setBusy(true)
     try {
-      let localUser
       if (mode === 'signin') {
-        localUser = await authenticateLocalAccount(identifier, password)
+        setUser(await authenticateLocalAccount(identifier, password))
       } else {
         if (password !== confirm) throw new Error('Passwords do not match.')
-        localUser = await registerLocalAccount({ id: userId, name, email, org, password })
-      }
-      setUser(localUser)
-      try {
-        const serverUser = await api.getCurrentUser()
-        setUser({ ...localUser, id: localUser.id, name: serverUser.name || localUser.name, email: serverUser.email || localUser.email, role: serverUser.role })
-      } catch {
-        // Local auth remains usable when the backend is temporarily unavailable.
+        setUser(await registerLocalAccount({ id: userId, name, email, org, password }))
       }
       navigate('/', { replace: true })
     } catch (reason) {

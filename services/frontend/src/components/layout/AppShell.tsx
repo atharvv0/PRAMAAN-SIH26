@@ -20,7 +20,7 @@ const NAV = [
   { to: '/approvals', label: 'Approvals', icon: CheckSquare, roles: ['reviewer', 'admin'] },
   { to: '/sovereignty', label: 'Sovereignty', icon: Shield },
   { to: '/audit', label: 'Audit', icon: Fingerprint, roles: ['admin'] },
-  { to: '/models', label: 'Model Registry', icon: Activity, roles: ['reviewer', 'admin'] },
+  { to: '/models', label: 'Model Registry', icon: Activity },
   { to: '/settings', label: 'Settings', icon: Settings, roles: ['operator', 'reviewer', 'admin'] },
 ]
 

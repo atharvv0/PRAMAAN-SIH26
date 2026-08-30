@@ -7,6 +7,7 @@ export interface ModelAdapter {
   version: string
   runtime: ModelRuntime
   capabilities: string[]
+  modalities?: string[]
   status: ModelHealth
   vramGb?: number
   description: string

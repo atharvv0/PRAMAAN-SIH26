@@ -28,8 +28,55 @@ class ReadFileTool(ToolAdapter):
         path = inputs.get("path")
         if not path:
             raise ValueError("ReadFileTool requires 'path' in inputs")
-        text = Path(path).read_text(encoding="utf-8")
-        return {"content": text, "path": path}
+        p = Path(path)
+        suffix = p.suffix.lower()
+        text = ""
+        if suffix == ".pdf":
+            import fitz
+            doc = fitz.open(path)
+            text = "\n\n".join(f"[Page {i+1}]\n{page.get_text('text')}" for i, page in enumerate(doc))
+        elif suffix == ".docx":
+            from docx import Document
+            doc = Document(path)
+            text = "\n".join([para.text for para in doc.paragraphs] + [cell.text for table in doc.tables for row in table.rows for cell in row.cells])
+        elif suffix == ".pptx":
+            from pptx import Presentation
+            prs = Presentation(path)
+            slides=[]
+            for i, slide in enumerate(prs.slides, 1):
+                lines=[]
+                for shape in slide.shapes:
+                    if getattr(shape, "has_text_frame", False):
+                        lines.append(shape.text)
+                slides.append(f"[Slide {i}]\n" + "\n".join(x for x in lines if x))
+            text="\n\n".join(slides)
+        elif suffix in {".xlsx", ".xlsm"}:
+            from openpyxl import load_workbook
+            wb=load_workbook(path, read_only=True, data_only=True)
+            blocks=[]
+            for ws in wb.worksheets:
+                rows=["\t".join("" if v is None else str(v) for v in row) for row in ws.iter_rows(values_only=True)]
+                blocks.append(f"[Sheet {ws.title}]\n"+"\n".join(rows))
+            text="\n\n".join(blocks)
+        elif suffix in {".csv", ".tsv"}:
+            text=p.read_text(encoding="utf-8", errors="replace")
+        elif suffix in {".json"}:
+            text=p.read_text(encoding="utf-8", errors="replace")
+        elif suffix in {".txt", ".md", ".log", ".xml", ".html"}:
+            text=p.read_text(encoding="utf-8", errors="replace")
+        else:
+            raise ValueError(f"Unsupported text-readable file type: {suffix or 'unknown'}")
+        return {
+            "content": text,
+            "path": path,
+            "evidence": [{
+                "claim": f"Source document content extracted successfully from {p.name}.",
+                "source": path,
+                "page_or_region": "page_1",
+                "confidence": 1.0,
+                "validation_state": "unverified",
+            }],
+        }
 
 
 class OcrProcessNaiveTool(ToolAdapter):

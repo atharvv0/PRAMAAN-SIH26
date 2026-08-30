@@ -53,7 +53,8 @@ def get_evidence(taskId: str | None = None, runId: str | None = None, current_us
 
 @router.get("/evidence/{evidence_id}")
 def get_evidence_by_id(evidence_id: str, current_user=Depends(get_current_user)):
-    found = next((x for x in repo.evidence(user_id=current_user.user_id) if x["id"] == evidence_id), None)
+    role = str(getattr(current_user, "role", "operator")).lower()
+    found = next((x for x in repo.evidence(user_id=None if role in {"reviewer", "admin"} else current_user.user_id) if x["id"] == evidence_id), None)
     if not found:
         raise HTTPException(status_code=404, detail="evidence not found")
     return found

@@ -6,6 +6,7 @@ from services.knowledge.rag.tool import KnowledgeSearchTool
 from services.orchestrator.tools.base import ToolRegistry
 from services.orchestrator.tools.examples import NetworkFetchDemoTool, ReadFileTool
 from services.orchestrator.tools.model_backed import CodingModelTool, ReasoningModelTool, SummarizeTextModelTool
+from services.orchestrator.tools.artifacts import ArtifactWriteTool
 from services.sandbox.code_tool import CodeExecuteTool
 
 
@@ -19,6 +20,7 @@ def build_tool_registry() -> ToolRegistry:
     registry.register(CodeExecuteTool())
     registry.register(OcrProcessTool())
     registry.register(KnowledgeSearchTool(get_retriever()))
+    registry.register(ArtifactWriteTool())
     return registry
 
 

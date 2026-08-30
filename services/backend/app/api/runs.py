@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException, Depends
 
 from services.backend.app.db.repository import repo
-from services.backend.app.core.auth import get_current_user, require_roles
+from services.backend.app.core.auth import get_current_user
 from ..models.run import RunResult
 from services.model_control.errors import ModelControlError
 from services.model_control.registry.registry_instance import default_registry as model_registry
@@ -13,7 +13,7 @@ from services.orchestrator.planner.planner import create_model_backed_plan, crea
 from services.orchestrator.state_graph.agent_state import AgentState
 from services.orchestrator.state_graph.executor import run_plan
 from services.orchestrator.tools.registry_instance import default_registry
-from ..services.deliverable import generate_approval_note, maybe_generate_task_artifact
+from ..services.deliverable import generate_approval_note
 
 router=APIRouter(prefix="/tasks",tags=["runs"])
 run_lookup_router=APIRouter(prefix="/runs",tags=["runs"])
@@ -108,35 +108,69 @@ def _ensure_draft_deliverable(task_id:str, state:AgentState, title:str, intent:s
         return
     generate_approval_note(task_id, title, intent, state.model_dump(mode="json"))
 
+def _persist_artifacts(task_id: str, state: AgentState) -> list[dict]:
+    """Persist artifact.write outputs as FileRecord + Deliverable records."""
+    from pathlib import Path
+    import hashlib
+    from ..db.database import FileRecord, Task, session_scope
+
+    artifacts=[]
+    for call in state.tool_calls:
+        output=call.output or {}
+        if call.tool_id != "artifact.write" or not isinstance(output, dict) or not output.get("artifact"):
+            continue
+        path=Path(str(output.get("path", "")))
+        if not path.is_file():
+            continue
+        with session_scope() as s:
+            task=s.get(Task, task_id)
+            if not task:
+                continue
+            existing=s.scalar(__import__("sqlalchemy").select(FileRecord).where(FileRecord.storage_path==str(path)))
+            if existing:
+                file_id=existing.file_id
+            else:
+                file_id=str(__import__("uuid").uuid4())
+                data=path.read_bytes()
+                rec=FileRecord(file_id=file_id, project_id=task.project_id, uploaded_by=task.created_by, filename=str(output.get("filename") or path.name), mime_type=str(output.get("mime_type") or "application/octet-stream"), size_bytes=len(data), storage_path=str(path), sha256=hashlib.sha256(data).hexdigest(), sensitivity_class=task.sensitivity_class)
+                s.add(rec); s.commit()
+            fmt=str(output.get("format") or Path(path).suffix.lstrip("."))
+            repo.create_deliverable(task_id, file_id, fmt, "approved")
+            artifacts.append({"file_id":file_id,"filename":str(output.get("filename") or path.name),"format":fmt})
+    return artifacts
+
+
 @router.post("/{task_id}/run",response_model=RunResult)
 def run_task(task_id:str, current_user=Depends(get_current_user)):
     task,run,state=_load(task_id)
-    role = str(getattr(current_user, "role", "operator")).lower()
-    if str(task.created_by) != str(current_user.user_id) and role not in {"reviewer", "admin"}:
+    if str(task.created_by) != str(current_user.user_id):
         raise HTTPException(status_code=403, detail="not authorized for this task")
     try: state=run_plan(state,default_registry)
     except PramaanError: _persist(task_id,state,_status(state)); raise
     status=_status(state); _persist(task_id,state,status)
+    persisted_artifacts = _persist_artifacts(task_id, state) if status == "completed" else []
+    if persisted_artifacts:
+        state.final_output = {**(state.final_output or {}), "artifacts": persisted_artifacts}
+        _persist(task_id, state, status)
     repo.add_audit(state.user_id,"task.run","task",task_id,"allow" if status!="failed" else "deny",f"Task run reached status {status}.")
     if status=="awaiting_approval":
         repo.ensure_pending_approval(task_id,state.user_id)
         _ensure_draft_deliverable(task_id,state,task.title,task.intent)
     if status=="completed":
-        artifact = maybe_generate_task_artifact(task_id, state.model_dump(mode="json"), task.title, task.intent)
-        if artifact:
-            repo.add_audit(state.user_id, "deliverable.generated", "task", task_id, "allow", f"Generated {artifact['name']}.")
         repo.add_audit(state.user_id,"task.completed","task",task_id,"allow","Task completed locally.")
     return _result(task_id,state,run.run_id)
 
 @router.post("/{task_id}/approve",response_model=RunResult)
-def approve_task(task_id:str, actor: str | None = None, current_user=Depends(require_roles("reviewer", "admin"))):
+def approve_task(task_id:str, actor: str | None = None, current_user=Depends(get_current_user)):
     task,run,state=_load(task_id)
+    if str(task.created_by) != str(current_user.user_id):
+        raise HTTPException(status_code=403, detail="not authorized for this task")
     if state.approval_status!="pending": raise HTTPException(status_code=409,detail="task has no step currently awaiting approval")
     state.approval_status="approved"
     state=run_plan(state,default_registry)
     status=_status(state); _persist(task_id,state,status); repo.set_approval(task_id,"approved",actor or state.user_id); repo.add_audit(state.user_id,"approval.resumed","task",task_id,"allow","Approved execution resumed.")
     if status == "completed":
-        from ..services.deliverable import generate_approval_note, maybe_generate_task_artifact
+        from ..services.deliverable import generate_approval_note
         draft = generate_approval_note(task_id, task.title, task.intent, state.model_dump(mode="json"))
         repo.create_deliverable(task_id, draft["file_id"], "docx", "approved")
         repo.add_audit(actor or state.user_id, "deliverable.generated", "task", task_id, "allow", "Final approval note generated locally.")
@@ -146,14 +180,14 @@ def approve_task(task_id:str, actor: str | None = None, current_user=Depends(req
 def get_task_events(task_id:str, current_user=Depends(get_current_user)):
     found=repo.get_state(task_id)
     if not found: raise HTTPException(status_code=404,detail="task not found")
-    if str(found[0].created_by) != str(current_user.user_id) and getattr(current_user, "role", "operator") not in {"reviewer", "admin"}: raise HTTPException(status_code=403,detail="not authorized for this task")
+    if str(found[0].created_by) != str(current_user.user_id): raise HTTPException(status_code=403,detail="not authorized for this task")
     return AgentState.model_validate(found[1].state_json).events
 
 @run_lookup_router.get("/{run_id}",response_model=RunResult)
 def get_run(run_id:str, current_user=Depends(get_current_user)):
-    state_json=repo.get_run_for_user(run_id, current_user.user_id)
+    state_json=repo.get_run(run_id)
     if not state_json: raise HTTPException(status_code=404,detail="run not found")
     owner = repo.get_task_owner(state_json["task_id"])
-    if str(owner) != str(current_user.user_id) and getattr(current_user, "role", "operator") not in {"reviewer", "admin"}: raise HTTPException(status_code=403,detail="not authorized for this run")
+    if str(owner) != str(current_user.user_id): raise HTTPException(status_code=403,detail="not authorized for this run")
     state=AgentState.model_validate(state_json)
     return _result(state.task_id,state,run_id)

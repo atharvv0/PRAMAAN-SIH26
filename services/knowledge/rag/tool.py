@@ -29,7 +29,12 @@ class KnowledgeSearchTool(ToolAdapter):
         if not query:
             raise ValueError("KnowledgeSearchTool requires 'query' in inputs")
         top_k = inputs.get("top_k", 3)
-        evidence = self._retriever.retrieve(query, top_k=top_k)
+        metadata_filter = {}
+        if inputs.get("user_id"):
+            metadata_filter["user_id"] = inputs["user_id"]
+        if inputs.get("workspace_id"):
+            metadata_filter["workspace_id"] = inputs["workspace_id"]
+        evidence = self._retriever.retrieve(query, top_k=top_k, metadata_filter=metadata_filter or None)
         return {
             "query": query,
             "result_count": len(evidence),

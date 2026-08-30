@@ -214,6 +214,10 @@ def run_plan(
                 # ------------------------------------------------------
                 # Actual tool invocation
                 # ------------------------------------------------------
+                if step.tool == "knowledge.search":
+                    step.inputs = {**step.inputs, "user_id": state.user_id}
+                if step.tool in {"text.summarize_model", "model.reason", "artifact.write"}:
+                    step.inputs = {**step.inputs, "intent": state.intent}
                 result = tool.invoke(step.inputs)
 
                 # ------------------------------------------------------

@@ -7,10 +7,10 @@ from services.knowledge.rag.embeddings import embed_text, embed_texts, embedding
 
 try:
     from qdrant_client import QdrantClient
-    from qdrant_client.models import Distance, PointStruct, VectorParams
+    from qdrant_client.models import Distance, FieldCondition, Filter, MatchValue, PointStruct, VectorParams
 except ImportError:  # optional for true local in-memory development
     QdrantClient = Any  # type: ignore[misc,assignment]
-    Distance = PointStruct = VectorParams = None  # type: ignore[assignment]
+    Distance = FieldCondition = Filter = MatchValue = PointStruct = VectorParams = None  # type: ignore[assignment]
 
 
 class VectorStore:
@@ -49,7 +49,7 @@ class VectorStore:
         self._client.upsert(collection_name=self._collection, points=points)
         return ids
 
-    def search(self, query: str, top_k: int = 3) -> list[dict]:
+    def search(self, query: str, top_k: int = 3, metadata_filter: dict | None = None) -> list[dict]:
         # Embed the query once and reuse it for both collection sizing and
         # the actual search -- this used to call embed_text(query) twice per
         # search (doubling embedding latency/cost, and doubling network
@@ -58,7 +58,10 @@ class VectorStore:
         # time a collection is created.
         query_vector = embed_text(query)
         self._ensure_collection(len(query_vector))
-        response = self._client.query_points(collection_name=self._collection, query=query_vector, limit=top_k)
+        query_filter = None
+        if metadata_filter:
+            query_filter = Filter(must=[FieldCondition(key=k, match=MatchValue(value=v)) for k, v in metadata_filter.items() if v is not None])
+        response = self._client.query_points(collection_name=self._collection, query=query_vector, limit=top_k, query_filter=query_filter)
         return [{"text":p.payload["text"],"source":p.payload["source"],"chunk_index":p.payload.get("chunk_index",0),"score":p.score,"point_id":str(p.id)} for p in response.points]
 
 
@@ -77,13 +80,15 @@ class MemoryVectorStore:
             self._items.append({"id":point_id,"text":chunk,"source":source,"chunk_index":i,"vector":vector,**(metadata or {})})
         return ids
 
-    def search(self, query: str, top_k: int = 3) -> list[dict]:
+    def search(self, query: str, top_k: int = 3, metadata_filter: dict | None = None) -> list[dict]:
         import math
         q=embed_text(query)
         def dot(a,b): return sum(x*y for x,y in zip(a,b))
         scored=[]
         qnorm=math.sqrt(dot(q,q)) or 1.0
         for item in self._items:
+            if metadata_filter and any(item.get(k) != v for k, v in metadata_filter.items() if v is not None):
+                continue
             v=item["vector"]; vnorm=math.sqrt(dot(v,v)) or 1.0
             score=dot(q,v)/(qnorm*vnorm)
             scored.append((score,item))

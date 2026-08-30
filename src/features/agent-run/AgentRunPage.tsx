@@ -1,61 +1,61 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import type { AgentStep } from '@/types/agent'
-import { StatusBadge } from '@/components/ui/StatusBadge'
-import { ModelBadge } from '@/components/common/Indicators'
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import type { AgentStep } from "@/types/agent";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { ModelBadge } from "@/components/common/Indicators";
 import {
   ErrorState,
   LoadingState,
   MetaRow,
   SectionLabel,
-} from '@/components/common/States'
-import { useAgentRun, useEvidence, useTask } from '@/hooks'
-import { formatClock, formatDuration } from '@/lib/utils'
-import { TaskTimeline } from './TaskTimeline'
-import { ModelRoutingPanel } from './ModelRoutingPanel'
-import { ToolTracePanel } from './ToolTracePanel'
+} from "@/components/common/States";
+import { useAgentRun, useEvidence, useTask } from "@/hooks";
+import { formatClock, formatDuration } from "@/lib/utils";
+import { TaskTimeline } from "./TaskTimeline";
+import { ModelRoutingPanel } from "./ModelRoutingPanel";
+import { ToolTracePanel } from "./ToolTracePanel";
 
 export function AgentRunPage() {
-  const { runId } = useParams<{ runId: string }>()
-  const runQuery = useAgentRun(runId)
-  const taskQuery = useTask(runQuery.data?.taskId ?? '')
-  const evidenceQuery = useEvidence(runQuery.data?.taskId, runId)
+  const { runId } = useParams<{ runId: string }>();
+  const runQuery = useAgentRun(runId);
+  const taskQuery = useTask(runQuery.data?.taskId ?? "");
+  const evidenceQuery = useEvidence(runQuery.data?.taskId, runId);
 
-  const [selectedStep, setSelectedStep] = useState<AgentStep | null>(null)
+  const [selectedStep, setSelectedStep] = useState<AgentStep | null>(null);
 
-  const run = runQuery.data
-  const task = taskQuery.data
+  const run = runQuery.data;
+  const task = taskQuery.data;
 
   useEffect(() => {
-    if (!run) return
+    if (!run) return;
     setSelectedStep((prev) => {
       if (prev) {
-        const refreshed = run.plan.find((s) => s.id === prev.id)
-        if (refreshed) return refreshed
+        const refreshed = run.plan.find((s) => s.id === prev.id);
+        if (refreshed) return refreshed;
       }
       return (
         run.plan.find((s) => s.id === run.currentStepId) ??
         run.plan[run.plan.length - 1] ??
         null
-      )
-    })
-  }, [run])
+      );
+    });
+  }, [run]);
 
-  const evidenceCount = evidenceQuery.data?.length ?? 0
-  const inspector = useMemo(() => selectedStep, [selectedStep])
+  const evidenceCount = evidenceQuery.data?.length ?? 0;
+  const inspector = useMemo(() => selectedStep, [selectedStep]);
 
   if (runQuery.isLoading) {
-    return <LoadingState label="Connecting to execution console…" />
+    return <LoadingState label="Connecting to execution console…" />;
   }
 
   if (runQuery.isError || !run) {
     return (
       <ErrorState
         title="Run not found"
-        description={`No agent state for run ${runId ?? '—'}.`}
+        description={`No agent state for run ${runId ?? "—"}.`}
         onRetry={() => void runQuery.refetch()}
       />
-    )
+    );
   }
 
   return (
@@ -66,7 +66,7 @@ export function AgentRunPage() {
           <div className="min-w-0 flex-1 rail pl-3">
             <div className="text-micro text-text-muted">Execution console</div>
             <h1 className="text-[15px] font-semibold text-text truncate leading-tight mt-0.5">
-              {task?.title ?? 'Agent run'}
+              {task?.title ?? "Agent run"}
             </h1>
             <div className="font-mono text-[10px] text-text-muted mt-0.5">
               {run.id}
@@ -98,7 +98,7 @@ export function AgentRunPage() {
             >
               Evidence · {evidenceCount}
             </Link>
-            {run.status === 'approval_required' ? (
+            {run.status === "approval_required" ? (
               <Link
                 to="/approvals"
                 className="text-warning hover:underline font-semibold"
@@ -111,7 +111,9 @@ export function AgentRunPage() {
 
         {task?.instruction ? (
           <div className="border-t border-border px-3 py-2 bg-surface/50">
-            <div className="text-micro text-text-muted mb-1">Operator intent</div>
+            <div className="text-micro text-text-muted mb-1">
+              Operator intent
+            </div>
             <p className="text-[11.5px] text-text-secondary leading-relaxed line-clamp-2">
               {task.instruction}
             </p>
@@ -160,7 +162,9 @@ export function AgentRunPage() {
                   <MetaRow
                     label="Started"
                     value={
-                      inspector.startedAt ? formatClock(inspector.startedAt) : '—'
+                      inspector.startedAt
+                        ? formatClock(inspector.startedAt)
+                        : "—"
                     }
                     mono
                   />
@@ -171,8 +175,12 @@ export function AgentRunPage() {
                   />
                 </dl>
                 <dl>
-                  <MetaRow label="Model" value={inspector.modelId ?? '—'} mono />
-                  <MetaRow label="Tool" value={inspector.toolId ?? '—'} mono />
+                  <MetaRow
+                    label="Model"
+                    value={inspector.modelId ?? "—"}
+                    mono
+                  />
+                  <MetaRow label="Tool" value={inspector.toolId ?? "—"} mono />
                   <MetaRow
                     label="Evidence"
                     value={String(inspector.evidenceCount ?? 0)}
@@ -204,5 +212,5 @@ export function AgentRunPage() {
         </div>
       </div>
     </div>
-  )
+  );
 }

@@ -39,6 +39,7 @@ PLANNER_SAFE_TOOLS = {
     "model.reason",
     "code.generate_model",
     "code.execute",
+    "artifact.write",
 }
 
 
@@ -169,6 +170,57 @@ User task:
 """
 
 
+def _requested_artifact(intent: str) -> tuple[str, str] | None:
+    text = intent.lower()
+    if not any(k in text for k in ("deliver", "download", "file", "export", "save", "generate")):
+        return None
+    patterns = [
+        ("pptx", "pptx"), ("powerpoint", "pptx"),
+        ("docx", "docx"), ("word document", "docx"),
+        ("pdf", "pdf"), ("xlsx", "xlsx"), ("excel", "xlsx"),
+        ("csv", "csv"), ("json", "json"), ("markdown", "md"), (".md", "md"),
+        ("txt", "txt"), ("text file", "txt"),
+    ]
+    for token, fmt in patterns:
+        if token in text:
+            return fmt, f"pramaan_output.{fmt}"
+    return None
+
+
+def _ensure_final_steps(plan: Plan, intent: str, file_path: str | None) -> Plan:
+    """Guarantee evidence/reasoning/artifact stages for user-facing file tasks."""
+    text = intent.lower()
+    file_task = bool(file_path)
+    if file_task and any(k in text for k in ("review", "inspect", "assess", "safety", "finding", "evidence", "analyz", "analyse", "compliance", "report")):
+        existing_search = next((x for x in plan.steps if x.tool == "knowledge.search"), None)
+        final_reason = next((x for x in reversed(plan.steps) if x.tool == "model.reason"), None)
+        if existing_search is None:
+            search = PlanStep(capability="knowledge_search", tool="knowledge.search", inputs={"query": intent})
+            insert_at = len(plan.steps)
+            if final_reason is not None:
+                insert_at = plan.steps.index(final_reason)
+            search.depends_on = [x.id for x in plan.steps[:insert_at]]
+            plan.steps.insert(insert_at, search)
+            existing_search = search
+        if final_reason is None:
+            final_reason = PlanStep(capability="reasoning", tool="model.reason", inputs={"intent": intent}, depends_on=[x.id for x in plan.steps])
+            plan.steps.append(final_reason)
+        else:
+            final_reason.depends_on = list(dict.fromkeys([*final_reason.depends_on, existing_search.id]))
+
+    artifact = _requested_artifact(intent)
+    if artifact and plan.steps and not any(x.tool == "artifact.write" for x in plan.steps):
+        fmt, filename = artifact
+        artifact_step = PlanStep(
+            capability="artifact_generation",
+            tool="artifact.write",
+            inputs={"format": fmt, "filename": filename},
+            depends_on=[plan.steps[-1].id],
+        )
+        plan.steps.append(artifact_step)
+    return plan
+
+
 def create_model_backed_plan(
     task_id: str,
     intent: str,
@@ -220,6 +272,7 @@ def create_model_backed_plan(
         ) from exc
 
     plan = _build_plan_from_generated(task_id, intent, generated, file_path)
+    plan = _ensure_final_steps(plan, intent, file_path)
     if any(k in intent.lower() for k in ("approval note", "approval", "approve", "sign-off", "signoff")) and plan.steps:
         plan.steps[-1].requires_approval = True
     return plan
@@ -288,22 +341,19 @@ def create_plan(
             steps=[search_step, reason_step],
         )
 
-    is_visual_document = file_path and any(
-        k in intent_lower
-        for k in (
-            "scan",
-            "scanned",
-            "p&id",
-            "pid drawing",
-            "drawing",
-            "ocr",
-            "vision",
-            "image",
-            "photo",
-            "handwrit",
-            "inspection package",
-            "inspection report",
-            "pressure vessel",
+    visual_suffixes = {".png", ".jpg", ".jpeg", ".webp", ".bmp", ".tiff", ".pptx"}
+    is_visual_document = bool(
+        file_path
+        and (
+            str(file_path).lower().endswith(tuple(visual_suffixes))
+            or any(
+                k in intent_lower
+                for k in (
+                    "scan", "scanned", "p&id", "pid drawing", "drawing",
+                    "ocr", "vision", "image", "photo", "handwrit",
+                    "inspection package", "inspection report", "pressure vessel",
+                )
+            )
         )
     )
 
@@ -325,11 +375,11 @@ def create_plan(
             inputs={"intent": intent},
             depends_on=[analysis_step.id, summarize_step.id],
         )
-        return Plan(
+        return _ensure_final_steps(Plan(
             task_id=task_id,
             goal=intent,
             steps=[analysis_step, summarize_step, respond_step],
-        )
+        ), intent, file_path)
 
     if file_path:
         read_step = PlanStep(
@@ -351,11 +401,11 @@ def create_plan(
                 inputs={"intent": intent},
                 depends_on=[read_step.id, summarize_step.id],
             )
-            return Plan(
+            return _ensure_final_steps(Plan(
                 task_id=task_id,
                 goal=intent,
                 steps=[read_step, summarize_step, respond_step],
-            )
+            ), intent, file_path)
 
         respond_step = PlanStep(
             capability="reasoning",
@@ -363,11 +413,11 @@ def create_plan(
             inputs={"intent": intent},
             depends_on=[read_step.id],
         )
-        return Plan(
+        return _ensure_final_steps(Plan(
             task_id=task_id,
             goal=intent,
             steps=[read_step, respond_step],
-        )
+        ), intent, file_path)
 
     # Generic tasks still get a real answer-capable step.
     respond_step = PlanStep(

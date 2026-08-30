@@ -1,63 +1,73 @@
-import { useEffect, useMemo, useState } from 'react'
-import { Link, useParams } from 'react-router-dom'
-import type { AgentStep } from '@/types/agent'
-import { StatusBadge } from '@/components/ui/StatusBadge'
-import { ModelBadge } from '@/components/common/Indicators'
+import { useEffect, useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import type { AgentStep } from "@/types/agent";
+import { StatusBadge } from "@/components/ui/StatusBadge";
+import { ModelBadge } from "@/components/common/Indicators";
 import {
   ErrorState,
   LoadingState,
   MetaRow,
   SectionLabel,
-} from '@/components/common/States'
-import { useAgentRun, useDeliverables, useEvidence, useTask, useTaskEvents } from '@/hooks'
-import { formatClock, formatDuration } from '@/lib/utils'
-import { api } from '@/api/client'
-import { TaskTimeline } from './TaskTimeline'
-import { ModelRoutingPanel } from './ModelRoutingPanel'
-import { ToolTracePanel } from './ToolTracePanel'
+} from "@/components/common/States";
+import {
+  useAgentRun,
+  useDeliverables,
+  useEvidence,
+  useTask,
+  useTaskEvents,
+} from "@/hooks";
+import { formatClock, formatDuration } from "@/lib/utils";
+import { api } from "@/api/client";
+import { TaskTimeline } from "./TaskTimeline";
+import { ModelRoutingPanel } from "./ModelRoutingPanel";
+import { ToolTracePanel } from "./ToolTracePanel";
+
+export async function apiDownload(fileId: string) {
+  await api.downloadFile(fileId);
+}
 
 export function AgentRunPage() {
-  const { runId } = useParams<{ runId: string }>()
-  const runQuery = useAgentRun(runId)
-  const run = runQuery.data
-  const taskQuery = useTask(run?.taskId ?? '')
-  const evidenceQuery = useEvidence(run?.taskId, runId)
-  const eventQuery = useTaskEvents(run?.taskId ?? '')
-  const deliverablesQuery = useDeliverables(run?.taskId)
+  const { runId } = useParams<{ runId: string }>();
+  const runQuery = useAgentRun(runId);
+  const run = runQuery.data;
+  const taskQuery = useTask(run?.taskId ?? "");
+  const evidenceQuery = useEvidence(run?.taskId, runId);
+  const eventQuery = useTaskEvents(run?.taskId ?? "");
+  const deliverablesQuery = useDeliverables(run?.taskId);
 
-  const [selectedStep, setSelectedStep] = useState<AgentStep | null>(null)
-  const task = taskQuery.data
+  const [selectedStep, setSelectedStep] = useState<AgentStep | null>(null);
+  const task = taskQuery.data;
 
   useEffect(() => {
-    if (!run) return
+    if (!run) return;
     setSelectedStep((prev) => {
       if (prev) {
-        const refreshed = run.plan.find((s) => s.id === prev.id)
-        if (refreshed) return refreshed
+        const refreshed = run.plan.find((s) => s.id === prev.id);
+        if (refreshed) return refreshed;
       }
       return (
         run.plan.find((s) => s.id === run.currentStepId) ??
         run.plan[run.plan.length - 1] ??
         null
-      )
-    })
-  }, [run])
+      );
+    });
+  }, [run]);
 
-  const evidenceCount = evidenceQuery.data?.length ?? 0
-  const inspector = useMemo(() => selectedStep, [selectedStep])
+  const evidenceCount = evidenceQuery.data?.length ?? 0;
+  const inspector = useMemo(() => selectedStep, [selectedStep]);
 
   if (runQuery.isLoading) {
-    return <LoadingState label="Connecting to execution console…" />
+    return <LoadingState label="Connecting to execution console…" />;
   }
 
   if (runQuery.isError || !run) {
     return (
       <ErrorState
         title="Run not found"
-        description={`No agent state for run ${runId ?? '—'}.`}
+        description={`No agent state for run ${runId ?? "—"}.`}
         onRetry={() => void runQuery.refetch()}
       />
-    )
+    );
   }
 
   return (
@@ -68,7 +78,7 @@ export function AgentRunPage() {
           <div className="min-w-0 flex-1 rail pl-3">
             <div className="text-micro text-text-muted">Execution console</div>
             <h1 className="text-[15px] font-semibold text-text truncate leading-tight mt-0.5">
-              {task?.title ?? 'Agent run'}
+              {task?.title ?? "Agent run"}
             </h1>
             <div className="font-mono text-[10px] text-text-muted mt-0.5">
               {run.id}
@@ -100,7 +110,7 @@ export function AgentRunPage() {
             >
               Evidence · {evidenceCount}
             </Link>
-            {run.status === 'approval_required' ? (
+            {run.status === "approval_required" ? (
               <Link
                 to="/approvals"
                 className="text-warning hover:underline font-semibold"
@@ -113,7 +123,9 @@ export function AgentRunPage() {
 
         {task?.instruction ? (
           <div className="border-t border-border px-3 py-2 bg-surface/50">
-            <div className="text-micro text-text-muted mb-1">Operator intent</div>
+            <div className="text-micro text-text-muted mb-1">
+              Operator intent
+            </div>
             <p className="text-[11.5px] text-text-secondary leading-relaxed line-clamp-2">
               {task.instruction}
             </p>
@@ -162,7 +174,9 @@ export function AgentRunPage() {
                   <MetaRow
                     label="Started"
                     value={
-                      inspector.startedAt ? formatClock(inspector.startedAt) : '—'
+                      inspector.startedAt
+                        ? formatClock(inspector.startedAt)
+                        : "—"
                     }
                     mono
                   />
@@ -173,8 +187,12 @@ export function AgentRunPage() {
                   />
                 </dl>
                 <dl>
-                  <MetaRow label="Model" value={inspector.modelId ?? '—'} mono />
-                  <MetaRow label="Tool" value={inspector.toolId ?? '—'} mono />
+                  <MetaRow
+                    label="Model"
+                    value={inspector.modelId ?? "—"}
+                    mono
+                  />
+                  <MetaRow label="Tool" value={inspector.toolId ?? "—"} mono />
                   <MetaRow
                     label="Evidence"
                     value={String(inspector.evidenceCount ?? 0)}
@@ -206,47 +224,100 @@ export function AgentRunPage() {
         </div>
       </div>
 
-      <section className="border border-border bg-panel">
-        <SectionLabel>Final response</SectionLabel>
-        <div className="px-4 py-4">
-          {run.finalOutput ? (
-            <div className="whitespace-pre-wrap text-[12px] leading-6 text-text">{run.finalOutput}</div>
-          ) : (
-            <p className="text-[11px] text-text-muted">No user-facing response has been produced yet.</p>
-          )}
-        </div>
-      </section>
-
-      {deliverablesQuery.data?.length ? (
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-2">
         <section className="border border-border bg-panel">
-          <SectionLabel right={<span className="font-mono text-[10px]">{deliverablesQuery.data.length}</span>}>Generated deliverables</SectionLabel>
-          <div className="divide-y divide-border">
-            {deliverablesQuery.data.map((d) => (
-              <div key={d.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
-                <div className="min-w-0 flex-1"><div className="text-[12px] font-medium text-text">{d.name}</div><div className="text-[10px] text-text-muted">{d.type.toUpperCase()} · evidence {d.evidenceCount}</div></div>
-                {d.fileId ? <button type="button" onClick={() => void api.downloadFile(d.fileId!)} className="inline-flex h-7 items-center border border-border bg-raised px-2.5 text-[11px] font-medium text-text hover:bg-hover">Download</button> : null}
-              </div>
-            ))}
+          <SectionLabel>Final response</SectionLabel>
+          <div className="p-4 text-[12px] leading-6 text-text whitespace-pre-wrap">
+            {run.finalOutput || (
+              <span className="text-text-muted">
+                No final response was produced.
+              </span>
+            )}
           </div>
         </section>
-      ) : null}
+        <section className="border border-border bg-panel">
+          <SectionLabel>Generated deliverables</SectionLabel>
+          <div className="p-3 space-y-2">
+            {deliverablesQuery.data?.length ? (
+              deliverablesQuery.data.map((d) => (
+                <div
+                  key={d.id}
+                  className="flex items-center justify-between gap-3 border border-border bg-surface px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <div className="text-[12px] font-medium text-text truncate">
+                      {d.name}
+                    </div>
+                    <div className="text-[10px] text-text-muted uppercase">
+                      {d.type} · {d.approvalStatus}
+                    </div>
+                  </div>
+                  {d.fileId ? (
+                    <button
+                      type="button"
+                      onClick={() => void apiDownload(d.fileId!)}
+                      className="shrink-0 border border-border bg-raised px-2.5 py-1.5 text-[11px] hover:bg-hover"
+                    >
+                      Download
+                    </button>
+                  ) : null}
+                </div>
+              ))
+            ) : (
+              <span className="text-[11px] text-text-muted">
+                No deliverables generated for this run.
+              </span>
+            )}
+          </div>
+        </section>
+      </div>
 
       <section className="border border-border bg-panel">
-        <SectionLabel right={<span className="font-mono text-[10px]">{evidenceCount}</span>}>Evidence captured</SectionLabel>
-        <div className="divide-y divide-border">
-          {evidenceQuery.data?.length ? evidenceQuery.data.map((e) => (
-            <div key={e.id} className="px-4 py-3">
-              <div className="text-[12px] leading-relaxed text-text">{e.claim}</div>
-              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-text-muted"><span>{e.sourceDocument}</span><span>page {e.page}</span><span>confidence {Math.round(e.confidence * 100)}%</span><span>{e.validationStatus}</span>{e.modelId ? <span>{e.modelId}</span> : null}</div>
-            </div>
-          )) : <div className="px-4 py-4 text-[11px] text-text-muted">No evidence records were captured for this run.</div>}
-        </div>
-      </section>
-
-      <section className="border border-border bg-panel">
-        <SectionLabel right={<span className="font-mono text-[10px]">{eventQuery.data?.length ?? run.events?.length ?? 0}</span>}>Execution events</SectionLabel>
-        {eventQuery.isError ? <ErrorState className="m-3" title="Execution events unavailable" onRetry={() => void eventQuery.refetch()} /> : (eventQuery.data?.length ?? run.events?.length ?? 0) === 0 ? <p className="px-4 py-4 text-[11px] text-text-muted">No execution events have been returned for this run.</p> : <ul className="divide-y divide-border">{(eventQuery.data ?? run.events ?? []).slice(0, 12).map((event, index) => <li key={String(event.id ?? `${run.id}-${index}`)} className="grid gap-2 px-4 py-2.5 text-[11px] sm:grid-cols-[90px_minmax(0,1fr)]"><span className="font-mono text-[10px] text-text-muted">{typeof event.timestamp === 'string' ? formatClock(event.timestamp) : '—'}</span><span className="text-text-secondary">{typeof event.message === 'string' ? event.message : typeof event.action === 'string' ? event.action : JSON.stringify(event)}</span></li>)}</ul>}
+        <SectionLabel
+          right={
+            <span className="font-mono text-[10px]">
+              {eventQuery.data?.length ?? run.events?.length ?? 0}
+            </span>
+          }
+        >
+          Execution events
+        </SectionLabel>
+        {eventQuery.isError ? (
+          <ErrorState
+            className="m-3"
+            title="Execution events unavailable"
+            onRetry={() => void eventQuery.refetch()}
+          />
+        ) : (eventQuery.data?.length ?? run.events?.length ?? 0) === 0 ? (
+          <p className="px-4 py-4 text-[11px] text-text-muted">
+            No execution events have been returned for this run.
+          </p>
+        ) : (
+          <ul className="divide-y divide-border">
+            {(eventQuery.data ?? run.events ?? [])
+              .slice(0, 12)
+              .map((event, index) => (
+                <li
+                  key={String(event.id ?? `${run.id}-${index}`)}
+                  className="grid gap-2 px-4 py-2.5 text-[11px] sm:grid-cols-[90px_minmax(0,1fr)]"
+                >
+                  <span className="font-mono text-[10px] text-text-muted">
+                    {typeof event.timestamp === "string"
+                      ? formatClock(event.timestamp)
+                      : "—"}
+                  </span>
+                  <span className="text-text-secondary">
+                    {typeof event.message === "string"
+                      ? event.message
+                      : typeof event.action === "string"
+                        ? event.action
+                        : JSON.stringify(event)}
+                  </span>
+                </li>
+              ))}
+          </ul>
+        )}
       </section>
     </div>
-  )
+  );
 }

@@ -38,12 +38,14 @@ async def upload_file(
     )
 
     try:
-        get_retriever().ingest_file(
+        indexed = get_retriever().ingest_file(
             result["path"],
             metadata={"file_id": result["id"], "workspace_id": ws, "user_id": current_user.user_id},
         )
-    except Exception:
-        pass
+        result["knowledgeIndexedChunks"] = indexed
+    except Exception as exc:
+        result["knowledgeIndexedChunks"] = 0
+        result["knowledgeIndexError"] = str(exc)
 
     result.pop("path", None)
     return result
@@ -60,8 +62,11 @@ def download_file(file_id: str, current_user=Depends(get_current_user)):
                 FileRecord.uploaded_by == current_user.user_id,
             )
         )
+        role = str(getattr(current_user, "role", "operator")).lower()
         if rec is None:
             raise HTTPException(status_code=404, detail="file not found")
+        if str(rec.uploaded_by) != str(current_user.user_id) and role not in {"reviewer", "admin"}:
+            raise HTTPException(status_code=403, detail="not authorized for this file")
         path = Path(rec.storage_path)
         if not path.exists():
             raise HTTPException(status_code=404, detail="stored file not found")

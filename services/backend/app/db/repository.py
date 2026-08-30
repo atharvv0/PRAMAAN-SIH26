@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import hashlib
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
@@ -53,14 +52,7 @@ class Repository:
             if user:
                 return user
 
-            role = "operator"
-            admin_emails = {x.strip().lower() for x in os.environ.get("PRAMAAN_ADMIN_EMAILS", "").split(",") if x.strip()}
-            reviewer_emails = {x.strip().lower() for x in os.environ.get("PRAMAAN_REVIEWER_EMAILS", "").split(",") if x.strip()}
-            if email in admin_emails:
-                role = "admin"
-            elif email in reviewer_emails:
-                role = "reviewer"
-            user = User(email=email, display_name=email.split("@")[0], role=role)
+            user = User(email=email, display_name=email.split("@")[0])
             s.add(user)
             s.commit()
             s.refresh(user)
@@ -313,12 +305,12 @@ class Repository:
         }
 
     def list_tasks(
-        self, workspace_id: str | None = None, user_id: str | None = None, include_all: bool = False
+        self, workspace_id: str | None = None, user_id: str | None = None
     ) -> list[dict]:
         with session_scope() as s:
             q = select(Task).order_by(desc(Task.updated_at))
 
-            if user_id and not include_all:
+            if user_id:
                 q = q.where(Task.created_by == user_id)
 
             if workspace_id:
@@ -340,12 +332,14 @@ class Repository:
 
             return out
 
-    def get_task_for_user(self, task_id: str, user_id: str, include_all: bool = False) -> dict | None:
+    def get_task_for_user(self, task_id: str, user_id: str) -> dict | None:
         with session_scope() as s:
-            query = select(Task).where(Task.task_id == task_id)
-            if not include_all:
-                query = query.where(Task.created_by == user_id)
-            task = s.scalar(query)
+            task = s.scalar(
+                select(Task).where(
+                    Task.task_id == task_id,
+                    Task.created_by == user_id,
+                )
+            )
             if not task:
                 return None
             ws = s.scalar(
@@ -685,23 +679,22 @@ class Repository:
                 "eventType": target_type,
             }
 
-    def approvals(self, user_id: str | None = None, include_all: bool = False) -> list[dict]:
-        return self.approval_rows(user_id, include_all)
+    def approvals(self, user_id: str | None = None) -> list[dict]:
+        return self.approval_rows(user_id)
 
     def audits(
-        self, task_id: str | None = None, user_id: str | None = None
+        self, task_id: str | None = None
     ) -> list[dict]:
         with session_scope() as s:
-            q = select(AuditEvent).order_by(desc(AuditEvent.created_at))
+            q = select(AuditEvent).order_by(
+                desc(AuditEvent.created_at)
+            )
 
             if task_id:
                 q = q.where(
                     (AuditEvent.target_id == task_id)
                     | (AuditEvent.actor_id == task_id)
                 )
-
-            if user_id:
-                q = q.where(AuditEvent.actor_id == user_id)
 
             return [
                 {
@@ -824,28 +817,10 @@ class Repository:
             run = s.get(TaskRun, run_id)
             return run.state_json if run else None
 
-    def get_run_for_user(self, run_id: str, user_id: str):
-        with session_scope() as s:
-            row = s.scalar(
-                select(TaskRun)
-                .join(Task, Task.task_id == TaskRun.task_id)
-                .where(TaskRun.run_id == run_id, Task.created_by == user_id)
-            )
-            return row.state_json if row else None
-
-    def get_run_state_for_user(self, task_id: str, user_id: str):
-        with session_scope() as s:
-            row = s.scalar(
-                select(TaskRun)
-                .join(Task, Task.task_id == TaskRun.task_id)
-                .where(TaskRun.task_id == task_id, Task.created_by == user_id)
-            )
-            return row.state_json if row else None
-
-    def approval_rows(self, user_id: str | None = None, include_all: bool = False) -> list[dict]:
+    def approval_rows(self, user_id: str | None = None) -> list[dict]:
         with session_scope() as s:
             q = select(Approval).where(Approval.status == "pending")
-            if user_id and not include_all:
+            if user_id:
                 q = q.join(Task, Task.task_id == Approval.task_id).where(Task.created_by == user_id)
             rows = s.scalars(q).all()
 
@@ -1053,16 +1028,15 @@ class Repository:
         with session_scope() as s:
             existing = s.scalar(
                 select(Deliverable).where(
-                    Deliverable.task_id == task_id
+                    Deliverable.task_id == task_id,
+                    Deliverable.file_id == file_id,
                 )
             )
 
             if existing:
-                existing.file_id = file_id
                 existing.format = fmt
                 existing.approval_state = approval_state
                 s.commit()
-
                 return str(existing.deliverable_id)
 
             d = Deliverable(

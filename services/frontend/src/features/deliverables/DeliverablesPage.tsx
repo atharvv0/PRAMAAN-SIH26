@@ -16,6 +16,7 @@ import { formatDateTime } from '@/lib/utils'
 export function DeliverablesPage() {
   const { data, isLoading, isError, refetch } = useDeliverables()
   const [openProvenance, setOpenProvenance] = useState<string | null>(null)
+  const [downloading, setDownloading] = useState<string | null>(null)
 
   return (
     <div className="space-y-3">
@@ -77,8 +78,8 @@ export function DeliverablesPage() {
                       Evidence
                     </Link>
                     {d.downloadUrl || d.fileId ? (
-                      <button type="button" onClick={() => d.fileId ? void api.downloadFile(d.fileId) : undefined} className="inline-flex h-7 items-center border border-border bg-raised px-2.5 text-[11px] font-medium text-text hover:bg-hover">
-                        Download
+                      <button type="button" disabled={downloading === d.id} onClick={async () => { if (!d.fileId) return; setDownloading(d.id); try { await api.downloadFile(d.fileId) } finally { setDownloading(null) } }} className="inline-flex h-7 items-center border border-border bg-raised px-2.5 text-[11px] font-medium text-text hover:bg-hover disabled:opacity-60">
+                        {downloading === d.id ? "Downloading…" : "Download"}
                       </button>
                     ) : (
                       <span className="inline-flex h-7 items-center border border-border px-2.5 text-[11px] text-text-muted opacity-60">Download unavailable</span>

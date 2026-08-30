@@ -361,9 +361,9 @@ function mapRun(run: Record<string, unknown>): AgentState {
         : typeof run.finalOutput === "string"
           ? run.finalOutput
           : run.final_output && typeof run.final_output === "object"
-            ? str((run.final_output as Record<string, unknown>).response) || null
+            ? (typeof (run.final_output as Record<string, unknown>).response === "string" ? (run.final_output as Record<string, unknown>).response as string : null)
             : run.finalOutput && typeof run.finalOutput === "object"
-              ? str((run.finalOutput as Record<string, unknown>).response) || null
+              ? (typeof (run.finalOutput as Record<string, unknown>).response === "string" ? (run.finalOutput as Record<string, unknown>).response as string : null)
               : null,
     events: Array.isArray(run.events)
       ? (run.events as Array<Record<string, unknown>>)
@@ -500,6 +500,9 @@ function mapModel(model: Record<string, unknown>): ModelAdapter {
     capabilities: Array.isArray(model.capabilities)
       ? model.capabilities.filter((v): v is string => typeof v === "string")
       : [],
+    modalities: Array.isArray(model.modalities)
+      ? model.modalities.filter((v): v is string => typeof v === "string")
+      : undefined,
     status,
     vramGb:
       typeof model.vramGb === "number"
@@ -620,9 +623,14 @@ function mapDeliverable(item: Record<string, unknown>): Deliverable {
     id: str(item.id ?? item.deliverable_id),
     name: str(item.name, "Deliverable"),
     type:
+      item.type === "txt" ||
+      item.type === "md" ||
+      item.type === "pdf" ||
       item.type === "docx" ||
       item.type === "pptx" ||
       item.type === "xlsx" ||
+      item.type === "csv" ||
+      item.type === "json" ||
       item.type === "code" ||
       item.type === "report" ||
       item.type === "calculation"
@@ -665,28 +673,35 @@ export class ApiClient {
   }
 
 
-
   getAdminUsers(): Promise<Array<{ id: string; email: string; name: string; role: "operator" | "reviewer" | "admin"; active: boolean }>> {
     return httpJson<Array<Record<string, unknown>>>("/admin/users").then((items) => items.map((item) => ({
-      id: str(item.id), email: str(item.email), name: str(item.name, "User"),
-      role: str(item.role, "operator") as "operator" | "reviewer" | "admin", active: Boolean(item.active ?? true),
+      id: str(item.id),
+      email: str(item.email),
+      name: str(item.name, "User"),
+      role: str(item.role, "operator") as "operator" | "reviewer" | "admin",
+      active: Boolean(item.active ?? true),
     })));
   }
 
   updateUserRole(userId: string, role: "operator" | "reviewer" | "admin"): Promise<{ id: string; email: string; name: string; role: "operator" | "reviewer" | "admin"; active: boolean }> {
     return httpJson<Record<string, unknown>>(`/admin/users/${encodeURIComponent(userId)}/role`, {
-      method: "PATCH", body: JSON.stringify({ role }),
+      method: "PATCH",
+      body: JSON.stringify({ role }),
     }).then((item) => ({
-      id: str(item.id), email: str(item.email), name: str(item.name, "User"),
-      role: str(item.role, "operator") as "operator" | "reviewer" | "admin", active: Boolean(item.active ?? true),
+      id: str(item.id),
+      email: str(item.email),
+      name: str(item.name, "User"),
+      role: str(item.role, "operator") as "operator" | "reviewer" | "admin",
+      active: Boolean(item.active ?? true),
     }));
   }
+
   getCurrentUser(): Promise<{ id: string; email: string; name: string; role: "operator" | "reviewer" | "admin"; active: boolean }> {
     return httpJson<Record<string, unknown>>("/auth/me").then((item) => ({
       id: str(item.id),
       email: str(item.email),
       name: str(item.name, "User"),
-      role: (str(item.role, "operator") as "operator" | "reviewer" | "admin"),
+      role: str(item.role, "operator") as "operator" | "reviewer" | "admin",
       active: Boolean(item.active ?? true),
     }));
   }
@@ -701,6 +716,7 @@ export class ApiClient {
       local: Boolean(item.local ?? true),
     }));
   }
+
   getOverview(): Promise<DashboardOverview> {
     return httpJson<Record<string, unknown>>("/overview").then(mapOverview);
   }
@@ -891,6 +907,25 @@ export class ApiClient {
       `/evidence/${encodeURIComponent(id)}`,
     ).then(mapEvidence);
   }
+  async downloadFile(fileId: string): Promise<void> {
+    const email = currentAuthEmail();
+    const headers = new Headers({ Accept: "*/*" });
+    if (email) headers.set("X-User-Email", email);
+    const response = await fetch(apiUrl(`/files/${encodeURIComponent(fileId)}/download`), { headers });
+    if (!response.ok) {
+      const text = await response.text();
+      throw new ApiError(text || `Download failed with HTTP ${response.status}`, response.status);
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get("content-disposition") || "";
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    const filename = match?.[1] || "pramaan-deliverable";
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    URL.revokeObjectURL(url);
+  }
+
   getDeliverables(taskId?: string): Promise<Deliverable[]> {
     const q = taskId ? `?taskId=${encodeURIComponent(taskId)}` : "";
     return httpJson<Record<string, unknown>[]>(`/deliverables${q}`).then(
@@ -928,32 +963,6 @@ export class ApiClient {
     return httpJson<Record<string, unknown>[]>("/models").then((items) =>
       items.map(mapModel),
     );
-  }
-
-  async downloadFile(fileId: string): Promise<void> {
-    const email = currentAuthEmail();
-    const headers = new Headers({ Accept: "application/octet-stream" });
-    if (email) headers.set("X-User-Email", email);
-    const response = await fetch(apiUrl(`/files/${encodeURIComponent(fileId)}/download`), { headers });
-    if (!response.ok) {
-      let message = `Download failed with HTTP ${response.status}`;
-      try {
-        const body = await response.json() as { error?: { message?: string }; detail?: string };
-        message = body.error?.message ?? body.detail ?? message;
-      } catch { /* ignore non-json errors */ }
-      throw new ApiError(message, response.status, "DOWNLOAD_FAILED");
-    }
-    const blob = await response.blob();
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    const disposition = response.headers.get("content-disposition") ?? "";
-    const match = disposition.match(/filename=\"?([^\";]+)\"?/i);
-    anchor.download = match?.[1] ?? "pramaan-deliverable";
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
   }
   getSovereignty(): Promise<SovereigntyStatus> {
     return httpJson<Record<string, unknown>>("/sovereignty").then(

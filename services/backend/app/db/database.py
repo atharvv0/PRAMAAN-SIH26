@@ -18,9 +18,9 @@ from sqlalchemy import (
     String,
     Text,
     Uuid,
-    text,
     create_engine,
     select,
+    text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
@@ -63,7 +63,6 @@ class User(Base):
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
-    # Role is authoritative on the backend. New users start as operators.
     role: Mapped[str] = mapped_column(
         String(20),
         default="operator",
@@ -806,27 +805,14 @@ def init_db() -> None:
 
     Base.metadata.create_all(engine)
 
-    # Lightweight forward migration for local development when an existing
-    # database was created before the role field was introduced.
+    # Lightweight forward migration for local development.
     with engine.begin() as connection:
-        connection.execute(
-            text(
-                "ALTER TABLE users "
-                "ADD COLUMN IF NOT EXISTS role VARCHAR(20) "
-                "NOT NULL DEFAULT 'operator'"
-            )
-        )
+        connection.execute(text(
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS role VARCHAR(20) NOT NULL DEFAULT 'operator'"
+        ))
 
-    admin_emails = {
-        item.strip().lower()
-        for item in os.environ.get("PRAMAAN_ADMIN_EMAILS", "").split(",")
-        if item.strip()
-    }
-    reviewer_emails = {
-        item.strip().lower()
-        for item in os.environ.get("PRAMAAN_REVIEWER_EMAILS", "").split(",")
-        if item.strip()
-    }
+    admin_emails = {x.strip().lower() for x in os.environ.get("PRAMAAN_ADMIN_EMAILS", "").split(",") if x.strip()}
+    reviewer_emails = {x.strip().lower() for x in os.environ.get("PRAMAAN_REVIEWER_EMAILS", "").split(",") if x.strip()}
 
     with Session(engine) as session:
         seed_user = session.scalar(
@@ -875,15 +861,13 @@ def init_db() -> None:
             )
             session.add(project)
 
-        # Optional local role provisioning via environment. This is useful for
-        # a sovereign dev/demo installation; production should derive roles from
-        # an authoritative identity provider.
         if admin_emails or reviewer_emails:
             for user in session.scalars(select(User)).all():
                 email = user.email.lower()
                 desired = "admin" if email in admin_emails else ("reviewer" if email in reviewer_emails else user.role)
                 if desired != user.role:
                     user.role = desired
+
         session.commit()
 
 

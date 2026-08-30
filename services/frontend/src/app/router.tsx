@@ -42,7 +42,7 @@ export const router = createBrowserRouter([
     { path: 'sovereignty', element: <SovereigntyPage /> },
     { path: 'approvals', element: <RequireRole roles={['reviewer', 'admin']} />, children: [{ index: true, element: <ApprovalsPage /> }] },
     { path: 'audit', element: <RequireRole roles={['admin']} />, children: [{ index: true, element: <AuditPage /> }] },
-    { path: 'models', element: <RequireRole roles={['reviewer', 'admin']} />, children: [{ index: true, element: <ModelsPage /> }] },
+    { path: 'models', element: <ModelsPage /> },
     { path: 'settings', element: <SettingsPage /> },
     { path: '*', element: <NotFoundPage /> },
   ] }] },
