@@ -111,3 +111,41 @@ def test_default_registry_has_at_least_the_offline_fallback():
     assert "demo-fallback" in registry.list_ids()
     selected = select_model(registry, capability="summarize_text")
     assert selected.health_check() is True
+
+
+def test_discover_roles_prefers_qwen_for_text_and_gemma_for_vision():
+    from services.model_control.registry.registry_instance import _discover_roles
+
+    roles = _discover_roles([
+        "nomic-embed-text:latest",
+        "gemma3:4b",
+        "qwen3:4b",
+    ])
+
+    assert roles["reasoning"] == "qwen3:4b"
+    assert roles["summarize_text"] == "qwen3:4b"
+    assert roles["coding"] == "qwen3:4b"
+    assert roles["ocr"] == "gemma3:4b"
+    assert roles["vision"] == "gemma3:4b"
+    assert roles["document_analysis"] == "gemma3:4b"
+
+
+def test_embed_models_are_not_discovered_as_generation_models():
+    from services.model_control.registry.registry_instance import _discover_roles
+
+    roles = _discover_roles(["nomic-embed-text:latest"])
+
+    assert roles == {}
+
+
+def test_ollama_vision_adapter_exposes_image_modality():
+    from services.model_control.adapters.ollama_adapter import OllamaAdapter
+
+    adapter = OllamaAdapter(
+        "gemma",
+        "gemma3:4b",
+        ["vision", "ocr"],
+        modalities=["text", "image"],
+    )
+
+    assert "image" in adapter.modalities

@@ -22,3 +22,16 @@ The router must remain capability-driven. Adding a new model should only require
 ## Sovereignty
 
 Ollama is expected to run locally with `OLLAMA_NO_CLOUD=1`. The PRAMAAN application does not call OpenAI, Anthropic, Google, or other hosted AI APIs.
+
+
+## PRAMAAN SIH MVP auto-discovery
+
+When no role environment variables are set, the registry auto-discovers local
+Ollama models. For the standard SIH MVP local set:
+- `qwen3:4b` is preferred for `reasoning`, `summarize_text`, and `coding`.
+- `gemma3:4b` is preferred for `vision`, `ocr`, and `document_analysis`.
+- embedding models such as `nomic-embed-text` are intentionally excluded from
+  generation routing and remain owned by the Knowledge/RAG embedding subsystem.
+
+Vision/OCR adapters advertise both `text` and `image` modalities and forward
+`images` to Ollama's `/api/generate` endpoint when supplied.

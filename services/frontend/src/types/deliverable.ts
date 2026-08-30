@@ -1,6 +1,6 @@
 import type { StatusKind } from './status'
 
-export type DeliverableType = 'docx' | 'pptx' | 'xlsx' | 'code' | 'report' | 'calculation'
+export type DeliverableType = 'txt' | 'md' | 'json' | 'csv' | 'docx' | 'pptx' | 'xlsx' | 'code' | 'report' | 'calculation'
 export type ApprovalStatus = 'pending' | 'approved' | 'changes_requested' | 'rejected'
 
 export interface Deliverable {

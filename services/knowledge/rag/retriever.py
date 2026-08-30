@@ -17,25 +17,12 @@ class Retriever:
         return len(chunks)
 
     def ingest_file(self, path: str, metadata: dict | None = None) -> int:
-        source = path
-        text = ""
-        p=Path(path)
-        if p.suffix.lower() == ".pdf":
-            try:
-                import fitz
-                doc=fitz.open(path)
-                pages=[]
-                for page in doc:
-                    pages.append(page.get_text("text"))
-                text="\n".join(pages)
-            except Exception:
-                text=""
-        else:
-            try:text=p.read_text(encoding="utf-8")
-            except UnicodeDecodeError:text=""
+        from services.knowledge.ingestion.document_extractor import extract_document
+        extracted = extract_document(path)
+        text = str(extracted.get("content") or "")
         if not text.strip():
             return 0
-        return self.ingest_text(text, source=source, metadata=metadata)
+        return self.ingest_text(text, source=path, metadata=metadata)
 
     def retrieve(self, query: str, top_k: int = 3) -> list[dict]:
         hits=self._store.search(query,top_k=top_k)

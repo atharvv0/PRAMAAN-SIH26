@@ -10,6 +10,13 @@ from services.model_control.errors import ModelControlError
 from services.model_control.router.router import select_model
 from services.orchestrator.errors import ModelUnavailableError
 from services.orchestrator.tools.base import ToolAdapter
+import re
+
+
+def _clean_model_text(text: str) -> str:
+    text = re.sub(r"<think>.*?</think>", "", text, flags=re.IGNORECASE | re.DOTALL)
+    text = re.sub(r"<analysis>.*?</analysis>", "", text, flags=re.IGNORECASE | re.DOTALL)
+    return text.strip()
 
 
 def _select(capability: str):
@@ -86,7 +93,7 @@ class SummarizeTextModelTool(ToolAdapter):
         )
 
         return {
-            "summary": response.text,
+            "summary": _clean_model_text(response.text),
             "model_id": response.model_id,
             "latency_ms": response.latency_ms,
             "input_tokens": response.input_tokens,
@@ -124,7 +131,7 @@ class ReasoningModelTool(ToolAdapter):
         )
 
         return {
-            "content": response.text,
+            "content": _clean_model_text(response.text),
             "model_id": response.model_id,
             "latency_ms": response.latency_ms,
             "input_tokens": response.input_tokens,
@@ -150,7 +157,7 @@ class CodingModelTool(ToolAdapter):
             think=False,
         )
 
-        code = response.text.strip()
+        code = _clean_model_text(response.text)
         if code.startswith("```"):
             code = code.replace("```python", "", 1).replace("```", "").strip()
 

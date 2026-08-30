@@ -1,28 +1,31 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom'
-import { Activity, Boxes, CheckSquare, ClipboardList, FileOutput, Fingerprint, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, ScanSearch, Settings, Shield, Workflow, LogOut, Moon, Sun } from 'lucide-react'
+import { Activity, Bot, Boxes, CheckSquare, ClipboardList, FileOutput, Fingerprint, LayoutDashboard, Menu, PanelLeftClose, PanelLeftOpen, ScanSearch, Settings, Shield, Workflow, LogOut, Moon, Sun } from 'lucide-react'
 import { SovereigntyIndicator, HealthIndicator } from '@/components/common/Indicators'
 import { useAuthStore, useWorkbenchStore } from '@/store'
 import { useHealth } from '@/hooks'
+import { api } from '@/api/client'
 import { cn } from '@/lib/utils'
 import { useQueryClient } from '@tanstack/react-query'
 
 const NAV = [
+  { to: '/assistant', label: 'AI Assistant', icon: Bot },
+  { to: '/admin/users', label: 'Users & Roles', icon: Fingerprint, roles: ['admin'] },
   { to: '/', label: 'Overview', icon: LayoutDashboard, end: true },
   { to: '/workspaces', label: 'Workspaces', icon: Boxes },
   { to: '/tasks', label: 'Tasks', icon: ClipboardList },
   { to: '/runs', label: 'Runs', icon: Workflow },
   { to: '/evidence', label: 'Evidence', icon: ScanSearch },
   { to: '/deliverables', label: 'Deliverables', icon: FileOutput },
-  { to: '/approvals', label: 'Approvals', icon: CheckSquare },
+  { to: '/approvals', label: 'Approvals', icon: CheckSquare, roles: ['reviewer', 'admin'] },
   { to: '/sovereignty', label: 'Sovereignty', icon: Shield },
-  { to: '/audit', label: 'Audit', icon: Fingerprint },
-  { to: '/models', label: 'Model Registry', icon: Activity },
-  { to: '/settings', label: 'Settings', icon: Settings },
+  { to: '/audit', label: 'Audit', icon: Fingerprint, roles: ['admin'] },
+  { to: '/models', label: 'Model Registry', icon: Activity, roles: ['reviewer', 'admin'] },
+  { to: '/settings', label: 'Settings', icon: Settings, roles: ['operator', 'reviewer', 'admin'] },
 ]
 
 function breadcrumbFromPath(pathname: string) {
-  const labels: Record<string, string> = { workspaces: 'Workspaces', tasks: 'Tasks', runs: 'Runs', evidence: 'Evidence', deliverables: 'Deliverables', approvals: 'Approvals', sovereignty: 'Sovereignty', audit: 'Audit', models: 'Model Registry', settings: 'Settings', new: 'New task' }
+  const labels: Record<string, string> = { assistant: 'AI Assistant', admin: 'Administration', users: 'Users & Roles', workspaces: 'Workspaces', tasks: 'Tasks', runs: 'Runs', evidence: 'Evidence', deliverables: 'Deliverables', approvals: 'Approvals', sovereignty: 'Sovereignty', audit: 'Audit', models: 'Model Registry', settings: 'Settings', new: 'New task' }
   const parts = pathname.split('/').filter(Boolean)
   return parts.length ? ['Overview', ...parts.map((p) => labels[p] ?? p)] : ['Overview']
 }
@@ -36,6 +39,15 @@ export function AppShell() {
   const { workspaceName, sidebarCollapsed, toggleSidebar, theme, setTheme } = useWorkbenchStore()
   const health = useHealth()
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    void api.getCurrentUser().then((serverUser) => {
+      if (serverUser.email === user.email && serverUser.role !== user.role) {
+        useAuthStore.getState().setUser({ ...user, role: serverUser.role, name: serverUser.name || user.name })
+      }
+    }).catch(() => undefined)
+  }, [user])
 
   function handleSignOut() {
     signOut()
@@ -74,7 +86,7 @@ export function AppShell() {
         </div>
         <div className="border-b border-border px-3 py-2.5"><div className="text-micro text-text-muted">Workspace</div><div className={cn('mt-1 truncate text-[12px] font-medium text-text', sidebarCollapsed && 'text-center')}>{sidebarCollapsed ? '—' : workspaceName}</div></div>
         <nav className="flex-1 overflow-y-auto p-2" aria-label="Primary">
-          {NAV.map((item) => { const Icon = item.icon; return <NavLink key={item.to} to={item.to} end={item.end} title={item.label} onClick={() => setMobileOpen(false)} className={({ isActive }) => cn('group relative mb-0.5 flex items-center gap-3 px-3 py-2.5 text-[12px] font-medium transition-colors', isActive ? 'bg-raised text-text' : 'text-text-secondary hover:bg-raised/70 hover:text-text')}>
+          {NAV.filter((item) => !item.roles || item.roles.includes(user?.role ?? 'operator')).map((item) => { const Icon = item.icon; return <NavLink key={item.to} to={item.to} end={item.end} title={item.label} onClick={() => setMobileOpen(false)} className={({ isActive }) => cn('group relative mb-0.5 flex items-center gap-3 px-3 py-2.5 text-[12px] font-medium transition-colors', isActive ? 'bg-raised text-text' : 'text-text-secondary hover:bg-raised/70 hover:text-text')}>
             {({ isActive }) => <><span className={cn('absolute left-0 top-2 bottom-2 w-0.5', isActive ? 'bg-accent' : 'bg-transparent')} /><Icon className={cn('size-4 shrink-0', isActive ? 'text-accent' : 'text-text-muted group-hover:text-text')} aria-hidden />{!sidebarCollapsed ? <span>{item.label}</span> : null}</>}
           </NavLink> })}
         </nav>

@@ -4,7 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from services.backend.app.api import files, health, runs, tasks
+from services.backend.app.api import assistant, files, health, runs, tasks
 from services.backend.app.api.metadata import router as metadata_router
 from services.backend.app.core.config import settings
 from services.orchestrator.errors import PramaanError
@@ -52,6 +52,14 @@ async def validation_error_handler(request: Request, exc: RequestValidationError
     )
 
 
+@app.exception_handler(ValueError)
+async def value_error_handler(request: Request, exc: ValueError):
+    return JSONResponse(
+        status_code=400,
+        content=_error_payload("INVALID_REQUEST", str(exc)),
+    )
+
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -66,6 +74,7 @@ app.include_router(files.router, prefix="/api/v1")
 app.include_router(runs.router, prefix="/api/v1")
 app.include_router(runs.run_lookup_router, prefix="/api/v1")
 app.include_router(metadata_router, prefix="/api/v1")
+app.include_router(assistant.router, prefix="/api/v1")
 
 
 @app.get("/")

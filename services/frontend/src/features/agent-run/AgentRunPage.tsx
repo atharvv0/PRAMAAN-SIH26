@@ -9,8 +9,9 @@ import {
   MetaRow,
   SectionLabel,
 } from '@/components/common/States'
-import { useAgentRun, useEvidence, useTask, useTaskEvents } from '@/hooks'
+import { useAgentRun, useDeliverables, useEvidence, useTask, useTaskEvents } from '@/hooks'
 import { formatClock, formatDuration } from '@/lib/utils'
+import { api } from '@/api/client'
 import { TaskTimeline } from './TaskTimeline'
 import { ModelRoutingPanel } from './ModelRoutingPanel'
 import { ToolTracePanel } from './ToolTracePanel'
@@ -22,6 +23,7 @@ export function AgentRunPage() {
   const taskQuery = useTask(run?.taskId ?? '')
   const evidenceQuery = useEvidence(run?.taskId, runId)
   const eventQuery = useTaskEvents(run?.taskId ?? '')
+  const deliverablesQuery = useDeliverables(run?.taskId)
 
   const [selectedStep, setSelectedStep] = useState<AgentStep | null>(null)
   const task = taskQuery.data
@@ -203,6 +205,43 @@ export function AgentRunPage() {
           </section>
         </div>
       </div>
+
+      <section className="border border-border bg-panel">
+        <SectionLabel>Final response</SectionLabel>
+        <div className="px-4 py-4">
+          {run.finalOutput ? (
+            <div className="whitespace-pre-wrap text-[12px] leading-6 text-text">{run.finalOutput}</div>
+          ) : (
+            <p className="text-[11px] text-text-muted">No user-facing response has been produced yet.</p>
+          )}
+        </div>
+      </section>
+
+      {deliverablesQuery.data?.length ? (
+        <section className="border border-border bg-panel">
+          <SectionLabel right={<span className="font-mono text-[10px]">{deliverablesQuery.data.length}</span>}>Generated deliverables</SectionLabel>
+          <div className="divide-y divide-border">
+            {deliverablesQuery.data.map((d) => (
+              <div key={d.id} className="flex flex-wrap items-center gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1"><div className="text-[12px] font-medium text-text">{d.name}</div><div className="text-[10px] text-text-muted">{d.type.toUpperCase()} · evidence {d.evidenceCount}</div></div>
+                {d.fileId ? <button type="button" onClick={() => void api.downloadFile(d.fileId!)} className="inline-flex h-7 items-center border border-border bg-raised px-2.5 text-[11px] font-medium text-text hover:bg-hover">Download</button> : null}
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <section className="border border-border bg-panel">
+        <SectionLabel right={<span className="font-mono text-[10px]">{evidenceCount}</span>}>Evidence captured</SectionLabel>
+        <div className="divide-y divide-border">
+          {evidenceQuery.data?.length ? evidenceQuery.data.map((e) => (
+            <div key={e.id} className="px-4 py-3">
+              <div className="text-[12px] leading-relaxed text-text">{e.claim}</div>
+              <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-text-muted"><span>{e.sourceDocument}</span><span>page {e.page}</span><span>confidence {Math.round(e.confidence * 100)}%</span><span>{e.validationStatus}</span>{e.modelId ? <span>{e.modelId}</span> : null}</div>
+            </div>
+          )) : <div className="px-4 py-4 text-[11px] text-text-muted">No evidence records were captured for this run.</div>}
+        </div>
+      </section>
 
       <section className="border border-border bg-panel">
         <SectionLabel right={<span className="font-mono text-[10px]">{eventQuery.data?.length ?? run.events?.length ?? 0}</span>}>Execution events</SectionLabel>

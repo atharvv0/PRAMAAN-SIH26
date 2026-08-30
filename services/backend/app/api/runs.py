@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 
 from services.backend.app.db.repository import repo
+from services.backend.app.core.auth import get_current_user, require_roles
 from ..models.run import RunResult
 from services.model_control.errors import ModelControlError
 from services.model_control.registry.registry_instance import default_registry as model_registry
@@ -12,7 +13,7 @@ from services.orchestrator.planner.planner import create_model_backed_plan, crea
 from services.orchestrator.state_graph.agent_state import AgentState
 from services.orchestrator.state_graph.executor import run_plan
 from services.orchestrator.tools.registry_instance import default_registry
-from ..services.deliverable import generate_approval_note
+from ..services.deliverable import generate_approval_note, maybe_generate_task_artifact
 
 router=APIRouter(prefix="/tasks",tags=["runs"])
 run_lookup_router=APIRouter(prefix="/runs",tags=["runs"])
@@ -108,8 +109,11 @@ def _ensure_draft_deliverable(task_id:str, state:AgentState, title:str, intent:s
     generate_approval_note(task_id, title, intent, state.model_dump(mode="json"))
 
 @router.post("/{task_id}/run",response_model=RunResult)
-def run_task(task_id:str):
+def run_task(task_id:str, current_user=Depends(get_current_user)):
     task,run,state=_load(task_id)
+    role = str(getattr(current_user, "role", "operator")).lower()
+    if str(task.created_by) != str(current_user.user_id) and role not in {"reviewer", "admin"}:
+        raise HTTPException(status_code=403, detail="not authorized for this task")
     try: state=run_plan(state,default_registry)
     except PramaanError: _persist(task_id,state,_status(state)); raise
     status=_status(state); _persist(task_id,state,status)
@@ -118,32 +122,38 @@ def run_task(task_id:str):
         repo.ensure_pending_approval(task_id,state.user_id)
         _ensure_draft_deliverable(task_id,state,task.title,task.intent)
     if status=="completed":
+        artifact = maybe_generate_task_artifact(task_id, state.model_dump(mode="json"), task.title, task.intent)
+        if artifact:
+            repo.add_audit(state.user_id, "deliverable.generated", "task", task_id, "allow", f"Generated {artifact['name']}.")
         repo.add_audit(state.user_id,"task.completed","task",task_id,"allow","Task completed locally.")
     return _result(task_id,state,run.run_id)
 
 @router.post("/{task_id}/approve",response_model=RunResult)
-def approve_task(task_id:str, actor: str | None = None):
+def approve_task(task_id:str, actor: str | None = None, current_user=Depends(require_roles("reviewer", "admin"))):
     task,run,state=_load(task_id)
     if state.approval_status!="pending": raise HTTPException(status_code=409,detail="task has no step currently awaiting approval")
     state.approval_status="approved"
     state=run_plan(state,default_registry)
     status=_status(state); _persist(task_id,state,status); repo.set_approval(task_id,"approved",actor or state.user_id); repo.add_audit(state.user_id,"approval.resumed","task",task_id,"allow","Approved execution resumed.")
     if status == "completed":
-        from ..services.deliverable import generate_approval_note
+        from ..services.deliverable import generate_approval_note, maybe_generate_task_artifact
         draft = generate_approval_note(task_id, task.title, task.intent, state.model_dump(mode="json"))
         repo.create_deliverable(task_id, draft["file_id"], "docx", "approved")
         repo.add_audit(actor or state.user_id, "deliverable.generated", "task", task_id, "allow", "Final approval note generated locally.")
     return _result(task_id,state,run.run_id)
 
 @router.get("/{task_id}/events")
-def get_task_events(task_id:str):
+def get_task_events(task_id:str, current_user=Depends(get_current_user)):
     found=repo.get_state(task_id)
     if not found: raise HTTPException(status_code=404,detail="task not found")
+    if str(found[0].created_by) != str(current_user.user_id) and getattr(current_user, "role", "operator") not in {"reviewer", "admin"}: raise HTTPException(status_code=403,detail="not authorized for this task")
     return AgentState.model_validate(found[1].state_json).events
 
 @run_lookup_router.get("/{run_id}",response_model=RunResult)
-def get_run(run_id:str):
-    state_json=repo.get_run(run_id)
+def get_run(run_id:str, current_user=Depends(get_current_user)):
+    state_json=repo.get_run_for_user(run_id, current_user.user_id)
     if not state_json: raise HTTPException(status_code=404,detail="run not found")
+    owner = repo.get_task_owner(state_json["task_id"])
+    if str(owner) != str(current_user.user_id) and getattr(current_user, "role", "operator") not in {"reviewer", "admin"}: raise HTTPException(status_code=403,detail="not authorized for this run")
     state=AgentState.model_validate(state_json)
     return _result(state.task_id,state,run_id)

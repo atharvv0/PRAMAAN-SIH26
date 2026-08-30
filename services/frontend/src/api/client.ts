@@ -12,6 +12,7 @@ import type { DashboardOverview } from "@/types/overview";
 import type { NetworkEvent, SovereigntyStatus } from "@/types/sovereignty";
 import type { TaskDefinition, TaskFile } from "@/types/task";
 import type { Workspace } from "@/types/workspace";
+import { useAuthStore } from "@/store";
 
 export interface CreateTaskInput {
   title: string;
@@ -60,8 +61,18 @@ export class ApiError extends Error {
   }
 }
 
+function currentAuthEmail(): string | null {
+  const user = useAuthStore.getState().user;
+  const email = user?.email?.trim().toLowerCase();
+  return email || null;
+}
+
 async function httpJson<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
+  const email = currentAuthEmail();
+  if (email) {
+    headers.set("X-User-Email", email);
+  }
   headers.set("Accept", "application/json");
   if (init.body && !headers.has("Content-Type"))
     headers.set("Content-Type", "application/json");
@@ -349,7 +360,11 @@ function mapRun(run: Record<string, unknown>): AgentState {
         ? run.final_output
         : typeof run.finalOutput === "string"
           ? run.finalOutput
-          : null,
+          : run.final_output && typeof run.final_output === "object"
+            ? str((run.final_output as Record<string, unknown>).response) || null
+            : run.finalOutput && typeof run.finalOutput === "object"
+              ? str((run.finalOutput as Record<string, unknown>).response) || null
+              : null,
     events: Array.isArray(run.events)
       ? (run.events as Array<Record<string, unknown>>)
       : [],
@@ -649,6 +664,43 @@ export class ApiClient {
     return httpJson<{ status: string }>("/health");
   }
 
+
+
+  getAdminUsers(): Promise<Array<{ id: string; email: string; name: string; role: "operator" | "reviewer" | "admin"; active: boolean }>> {
+    return httpJson<Array<Record<string, unknown>>>("/admin/users").then((items) => items.map((item) => ({
+      id: str(item.id), email: str(item.email), name: str(item.name, "User"),
+      role: str(item.role, "operator") as "operator" | "reviewer" | "admin", active: Boolean(item.active ?? true),
+    })));
+  }
+
+  updateUserRole(userId: string, role: "operator" | "reviewer" | "admin"): Promise<{ id: string; email: string; name: string; role: "operator" | "reviewer" | "admin"; active: boolean }> {
+    return httpJson<Record<string, unknown>>(`/admin/users/${encodeURIComponent(userId)}/role`, {
+      method: "PATCH", body: JSON.stringify({ role }),
+    }).then((item) => ({
+      id: str(item.id), email: str(item.email), name: str(item.name, "User"),
+      role: str(item.role, "operator") as "operator" | "reviewer" | "admin", active: Boolean(item.active ?? true),
+    }));
+  }
+  getCurrentUser(): Promise<{ id: string; email: string; name: string; role: "operator" | "reviewer" | "admin"; active: boolean }> {
+    return httpJson<Record<string, unknown>>("/auth/me").then((item) => ({
+      id: str(item.id),
+      email: str(item.email),
+      name: str(item.name, "User"),
+      role: (str(item.role, "operator") as "operator" | "reviewer" | "admin"),
+      active: Boolean(item.active ?? true),
+    }));
+  }
+
+  chatAssistant(message: string, taskId?: string): Promise<{ response: string; modelId: string; local: boolean }> {
+    return httpJson<Record<string, unknown>>("/assistant/chat", {
+      method: "POST",
+      body: JSON.stringify({ message, task_id: taskId }),
+    }).then((item) => ({
+      response: str(item.response),
+      modelId: str(item.modelId, "local-model"),
+      local: Boolean(item.local ?? true),
+    }));
+  }
   getOverview(): Promise<DashboardOverview> {
     return httpJson<Record<string, unknown>>("/overview").then(mapOverview);
   }
@@ -709,12 +761,18 @@ export class ApiClient {
     let response: Response;
 
     try {
+      const headers = new Headers({
+        Accept: "application/json",
+      });
+      const email = currentAuthEmail();
+      if (email) {
+        headers.set("X-User-Email", email);
+      }
+
       response = await fetch(apiUrl("/files/upload"), {
         method: "POST",
         body,
-        headers: {
-          Accept: "application/json",
-        },
+        headers,
       });
     } catch (error) {
       throw new ApiError(
@@ -870,6 +928,32 @@ export class ApiClient {
     return httpJson<Record<string, unknown>[]>("/models").then((items) =>
       items.map(mapModel),
     );
+  }
+
+  async downloadFile(fileId: string): Promise<void> {
+    const email = currentAuthEmail();
+    const headers = new Headers({ Accept: "application/octet-stream" });
+    if (email) headers.set("X-User-Email", email);
+    const response = await fetch(apiUrl(`/files/${encodeURIComponent(fileId)}/download`), { headers });
+    if (!response.ok) {
+      let message = `Download failed with HTTP ${response.status}`;
+      try {
+        const body = await response.json() as { error?: { message?: string }; detail?: string };
+        message = body.error?.message ?? body.detail ?? message;
+      } catch { /* ignore non-json errors */ }
+      throw new ApiError(message, response.status, "DOWNLOAD_FAILED");
+    }
+    const blob = await response.blob();
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    const disposition = response.headers.get("content-disposition") ?? "";
+    const match = disposition.match(/filename=\"?([^\";]+)\"?/i);
+    anchor.download = match?.[1] ?? "pramaan-deliverable";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
   }
   getSovereignty(): Promise<SovereigntyStatus> {
     return httpJson<Record<string, unknown>>("/sovereignty").then(

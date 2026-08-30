@@ -10,7 +10,7 @@ import {
   PageHeader,
 } from '@/components/common/States'
 import { useDeliverables } from '@/hooks'
-import { apiUrl } from '@/api'
+import { api } from '@/api/client'
 import { formatDateTime } from '@/lib/utils'
 
 export function DeliverablesPage() {
@@ -77,9 +77,9 @@ export function DeliverablesPage() {
                       Evidence
                     </Link>
                     {d.downloadUrl || d.fileId ? (
-                      <a href={d.downloadUrl ?? apiUrl(`/files/${encodeURIComponent(d.fileId ?? '')}/download`)} target="_blank" rel="noreferrer" download className="inline-flex h-7 items-center border border-border bg-raised px-2.5 text-[11px] font-medium text-text hover:bg-hover">
+                      <button type="button" onClick={() => d.fileId ? void api.downloadFile(d.fileId) : undefined} className="inline-flex h-7 items-center border border-border bg-raised px-2.5 text-[11px] font-medium text-text hover:bg-hover">
                         Download
-                      </a>
+                      </button>
                     ) : (
                       <span className="inline-flex h-7 items-center border border-border px-2.5 text-[11px] text-text-muted opacity-60">Download unavailable</span>
                     )}

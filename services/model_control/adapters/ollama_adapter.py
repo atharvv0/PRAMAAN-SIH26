@@ -1,21 +1,18 @@
 """
-OllamaAdapter — real ModelAdapter implementation for the Ollama dev runtime
-(see .env.example MODEL_RUNTIME=ollama, MODEL_RUNTIME_HOST, MODEL_RUNTIME_PORT).
+OllamaAdapter — real ModelAdapter implementation for the local Ollama runtime.
 
-This talks to a real Ollama server over HTTP (`/api/generate`, `/api/tags`). It is
-not a mock: given a reachable Ollama instance with the named model pulled, invoke()
-returns a real completion. If no Ollama server is reachable (e.g. this sandbox, or
-a fresh dev machine before models are pulled), health_check() returns False and the
-router (services/model_control/router) falls back to another registered adapter —
-see registry_instance.py's DemoModelAdapter fallback.
+Supports:
+- text generation via /api/generate
+- image inputs for multimodal Ollama models via the `images` argument
+- model liveness checks via /api/tags
 
-vLLM production adapter: same interface, different HTTP client — add
-`vllm_adapter.py` alongside this one when the production runtime is benchmarked
-(services/model_control/benchmarks); do not extend this file to branch on runtime.
+The adapter is deliberately runtime-agnostic to callers: Orchestrator and Router
+depend only on ModelAdapter.
 """
 from __future__ import annotations
 
 import time
+from typing import Any
 
 import httpx
 
@@ -28,7 +25,7 @@ HEALTH_CHECK_TIMEOUT_SECONDS = 2.0
 class OllamaAdapter(ModelAdapter):
     def __init__(
         self,
-        id: str,  # noqa: A002 — matches ModelAdapter.id naming
+        id: str,  # noqa: A002
         model_name: str,
         capabilities: list[str],
         host: str = "localhost",
@@ -47,26 +44,43 @@ class OllamaAdapter(ModelAdapter):
         from services.model_control.errors import ModelInvocationError
 
         started = time.monotonic()
+
+        payload: dict[str, Any] = {
+            "model": self.model_name,
+            "prompt": prompt,
+            "stream": False,
+        }
+
+        # Supported Ollama generation controls.
+        for key in ("options", "system", "format", "think"):
+            if key in kwargs:
+                payload[key] = kwargs[key]
+
+        # Ollama multimodal generation accepts base64-encoded images.
+        # Accept either a single string or a list of strings.
+        if "images" in kwargs and kwargs["images"] is not None:
+            images = kwargs["images"]
+            if isinstance(images, str):
+                images = [images]
+            payload["images"] = images
+
         try:
             resp = httpx.post(
                 f"{self.base_url}/api/generate",
-                json={
-                    "model": self.model_name,
-                    "prompt": prompt,
-                    "stream": False,
-                    **{k: v for k, v in kwargs.items() if k in ("options", "system", "format", "think")},
-                },
+                json=payload,
                 timeout=self.timeout_seconds,
             )
             resp.raise_for_status()
             data = resp.json()
         except (httpx.HTTPError, ValueError) as exc:
             raise ModelInvocationError(
-                f"Ollama invocation failed for model '{self.model_name}': {exc}",
+                f"Ollama invocation failed for model "
+                f"'{self.model_name}': {exc}",
                 detail=repr(exc),
             ) from exc
 
         latency_ms = int((time.monotonic() - started) * 1000)
+
         return ModelResponse(
             model_id=self.id,
             text=data.get("response", ""),
@@ -78,12 +92,21 @@ class OllamaAdapter(ModelAdapter):
 
     def health_check(self) -> bool:
         try:
-            resp = httpx.get(f"{self.base_url}/api/tags", timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
+            resp = httpx.get(
+                f"{self.base_url}/api/tags",
+                timeout=HEALTH_CHECK_TIMEOUT_SECONDS,
+            )
+
             if resp.status_code != 200:
                 return False
+
             tags = resp.json().get("models", [])
-            return any((m.get("name") or "") == self.model_name for m in tags)
-        except (httpx.HTTPError, ValueError):
+
+            return any(
+                (model.get("name") or "") == self.model_name
+                for model in tags
+            )
+        except (httpx.HTTPError, ValueError, TypeError):
             return False
 
     def metadata(self) -> dict:
@@ -92,5 +115,7 @@ class OllamaAdapter(ModelAdapter):
             "runtime": "ollama",
             "model_name": self.model_name,
             "base_url": self.base_url,
-            "allow_restricted": self.base_url.startswith(("http://127.0.0.1", "http://localhost")),
+            "allow_restricted": self.base_url.startswith(
+                ("http://127.0.0.1", "http://localhost")
+            ),
         }
